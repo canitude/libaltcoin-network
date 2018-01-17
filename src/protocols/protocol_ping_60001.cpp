@@ -16,53 +16,55 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_ping_60001.hpp>
+#include <altcoin/network/protocols/protocol_ping_60001.hpp>
 
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol_ping_31402.hpp>
-#include <bitcoin/network/protocols/protocol_timer.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol_ping_31402.hpp>
+#include <altcoin/network/protocols/protocol_timer.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-#define CLASS protocol_ping_60001
+#define CLASS protocol_ping_60001<MessageSubscriber>
 
 using namespace bc::message;
 using namespace std::placeholders;
 
-protocol_ping_60001::protocol_ping_60001(p2p& network, channel::ptr channel)
-  : protocol_ping_31402(network, channel),
+template<class MessageSubscriber>
+protocol_ping_60001<MessageSubscriber>::protocol_ping_60001(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel)
+  : protocol_ping_31402<MessageSubscriber>(network, channel),
     pending_(false),
-    CONSTRUCT_TRACK(protocol_ping_60001)
+    CONSTRUCT_TRACK(protocol_ping_60001<MessageSubscriber>)
 {
 }
 
 // This is fired by the callback (i.e. base timer and stop handler).
-void protocol_ping_60001::send_ping(const code& ec)
+template<class MessageSubscriber>
+void protocol_ping_60001<MessageSubscriber>::send_ping(const code& ec)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return;
 
     if (ec && ec != error::channel_timeout)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure in ping timer for [" << authority() << "] "
+            << "Failure in ping timer for [" << this->authority() << "] "
             << ec.message();
-        stop(ec);
+        this->stop(ec);
         return;
     }
 
     if (pending_)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Ping latency limit exceeded [" << authority() << "]";
-        stop(error::channel_timeout);
+            << "Ping latency limit exceeded [" << this->authority() << "]";
+        this->stop(error::channel_timeout);
         return;
     }
 
@@ -72,33 +74,35 @@ void protocol_ping_60001::send_ping(const code& ec)
     SEND2(ping{ nonce }, handle_send_ping, _1, ping::command);
 }
 
-void protocol_ping_60001::handle_send_ping(const code& ec, const std::string&)
+template<class MessageSubscriber>
+void protocol_ping_60001<MessageSubscriber>::handle_send_ping(const code& ec, const std::string&)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure sending ping to [" << authority() << "] "
+            << "Failure sending ping to [" << this->authority() << "] "
             << ec.message();
-        stop(ec);
+        this->stop(ec);
         return;
     }
 }
 
-bool protocol_ping_60001::handle_receive_ping(const code& ec,
+template<class MessageSubscriber>
+bool protocol_ping_60001<MessageSubscriber>::handle_receive_ping(const code& ec,
     ping_const_ptr message)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure getting ping from [" << authority() << "] "
+            << "Failure getting ping from [" << this->authority() << "] "
             << ec.message();
-        stop(ec);
+        this->stop(ec);
         return false;
     }
 
@@ -106,18 +110,19 @@ bool protocol_ping_60001::handle_receive_ping(const code& ec,
     return true;
 }
 
-bool protocol_ping_60001::handle_receive_pong(const code& ec,
+template<class MessageSubscriber>
+bool protocol_ping_60001<MessageSubscriber>::handle_receive_pong(const code& ec,
     pong_const_ptr message, uint64_t nonce)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure getting pong from [" << authority() << "] "
+            << "Failure getting pong from [" << this->authority() << "] "
             << ec.message();
-        stop(ec);
+        this->stop(ec);
         return false;
     }
 
@@ -126,13 +131,15 @@ bool protocol_ping_60001::handle_receive_pong(const code& ec,
     if (message->nonce() != nonce)
     {
         LOG_WARNING(LOG_NETWORK)
-            << "Invalid pong nonce from [" << authority() << "]";
-        stop(error::bad_stream);
+            << "Invalid pong nonce from [" << this->authority() << "]";
+        this->stop(error::bad_stream);
         return false;
     }
 
     return false;
 }
+
+template class protocol_ping_60001<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

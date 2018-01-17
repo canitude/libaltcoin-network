@@ -27,35 +27,36 @@
 #include <string>
 #include <vector>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/hosts.hpp>
-#include <bitcoin/network/message_subscriber.hpp>
-#include <bitcoin/network/sessions/session_inbound.hpp>
-#include <bitcoin/network/sessions/session_manual.hpp>
-#include <bitcoin/network/sessions/session_outbound.hpp>
-#include <bitcoin/network/sessions/session_seed.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/hosts.hpp>
+#include <altcoin/network/message_subscriber.hpp>
+#include <altcoin/network/sessions/session_inbound.hpp>
+#include <altcoin/network/sessions/session_manual.hpp>
+#include <altcoin/network/sessions/session_outbound.hpp>
+#include <altcoin/network/sessions/session_seed.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 /// Top level public networking interface, partly thread safe.
+template <class MessageSubscriber>
 class BCT_API p2p
-  : public enable_shared_from_base<p2p>, noncopyable
+  : public enable_shared_from_base<p2p<MessageSubscriber>>, noncopyable
 {
 public:
-    typedef std::shared_ptr<p2p> ptr;
+    typedef std::shared_ptr<p2p<MessageSubscriber>> ptr;
     typedef message::network_address address;
     typedef std::function<void()> stop_handler;
     typedef std::function<void(bool)> truth_handler;
     typedef std::function<void(size_t)> count_handler;
     typedef std::function<void(const code&)> result_handler;
     typedef std::function<void(const code&, const address&)> address_handler;
-    typedef std::function<void(const code&, channel::ptr)> channel_handler;
-    typedef std::function<bool(const code&, channel::ptr)> connect_handler;
+    typedef std::function<void(const code&, typename channel<MessageSubscriber>::ptr)> channel_handler;
+    typedef std::function<bool(const code&, typename channel<MessageSubscriber>::ptr)> connect_handler;
     typedef subscriber<code> stop_subscriber;
-    typedef resubscriber<code, channel::ptr> channel_subscriber;
+    typedef resubscriber<code, typename channel<MessageSubscriber>::ptr> channel_subscriber;
 
     // Templates (send/receive).
     // ------------------------------------------------------------------------
@@ -116,7 +117,7 @@ public:
     virtual const settings& network_settings() const;
 
     /// Return the current top block identity.
-    config::checkpoint top_block() const;
+    virtual config::checkpoint top_block() const;
 
     /// Set the current top block identity.
     void set_top_block(config::checkpoint&& top);
@@ -175,22 +176,22 @@ public:
     // ------------------------------------------------------------------------
 
     /// Store a pending connection reference.
-    virtual code pend(connector::ptr connector);
+    virtual code pend(typename connector<MessageSubscriber>::ptr connector);
 
     /// Free a pending connection reference.
-    virtual void unpend(connector::ptr connector);
+    virtual void unpend(typename connector<MessageSubscriber>::ptr connector);
 
     // Pending handshake collection.
     // ------------------------------------------------------------------------
 
     /// Store a pending connection reference.
-    virtual code pend(channel::ptr channel);
+    virtual code pend(typename channel<MessageSubscriber>::ptr channel);
 
     /// Test for a pending connection reference.
     virtual bool pending(uint64_t version_nonce) const;
 
     /// Free a pending connection reference.
-    virtual void unpend(channel::ptr channel);
+    virtual void unpend(typename channel<MessageSubscriber>::ptr channel);
 
     // Pending close collection (open connections).
     // ------------------------------------------------------------------------
@@ -199,13 +200,13 @@ public:
     virtual size_t connection_count() const;
 
     /// Store a connection.
-    virtual code store(channel::ptr channel);
+    virtual code store(typename channel<MessageSubscriber>::ptr channel);
 
     /// Determine if there exists a connection to the address.
     virtual bool connected(const address& address) const;
 
     /// Remove a connection.
-    virtual void remove(channel::ptr channel);
+    virtual void remove(typename channel<MessageSubscriber>::ptr channel);
 
 protected:
 
@@ -217,20 +218,20 @@ protected:
     }
 
     /// Override to attach specialized sessions.
-    virtual session_seed::ptr attach_seed_session();
-    virtual session_manual::ptr attach_manual_session();
-    virtual session_inbound::ptr attach_inbound_session();
-    virtual session_outbound::ptr attach_outbound_session();
+    virtual typename session_seed<MessageSubscriber>::ptr attach_seed_session();
+    virtual typename session_manual<MessageSubscriber>::ptr attach_manual_session();
+    virtual typename session_inbound<MessageSubscriber>::ptr attach_inbound_session();
+    virtual typename session_outbound<MessageSubscriber>::ptr attach_outbound_session();
 
-private:
-    typedef bc::pending<channel> pending_channels;
-    typedef bc::pending<connector> pending_connectors;
+protected:
+    typedef bc::pending<channel<MessageSubscriber>> pending_channels;
+    typedef bc::pending<connector<MessageSubscriber>> pending_connectors;
 
     void handle_manual_started(const code& ec, result_handler handler);
     void handle_inbound_started(const code& ec, result_handler handler);
     void handle_hosts_loaded(const code& ec, result_handler handler);
     void handle_hosts_saved(const code& ec, result_handler handler);
-    void handle_send(const code& ec, channel::ptr channel,
+    void handle_send(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         channel_handler handle_channel, result_handler handle_complete);
 
     void handle_started(const code& ec, result_handler handler);
@@ -240,14 +241,14 @@ private:
     const settings& settings_;
     std::atomic<bool> stopped_;
     bc::atomic<config::checkpoint> top_block_;
-    bc::atomic<session_manual::ptr> manual_;
+    bc::atomic<typename session_manual<MessageSubscriber>::ptr> manual_;
     threadpool threadpool_;
     hosts hosts_;
     pending_connectors pending_connect_;
     pending_channels pending_handshake_;
     pending_channels pending_close_;
     stop_subscriber::ptr stop_subscriber_;
-    channel_subscriber::ptr channel_subscriber_;
+    typename channel_subscriber::ptr channel_subscriber_;
 };
 
 } // namespace network

@@ -16,15 +16,15 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_timer.hpp>
+#include <altcoin/network/protocols/protocol_timer.hpp>
 
 #include <functional>
 #include <memory>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol_events.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol_events.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -32,9 +32,10 @@ namespace network {
 #define CLASS protocol_timer
 using namespace std::placeholders;
 
-protocol_timer::protocol_timer(p2p& network, channel::ptr channel,
+template<class MessageSubscriber>
+protocol_timer<MessageSubscriber>::protocol_timer(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel,
     bool perpetual, const std::string& name)
-  : protocol_events(network, channel, name),
+  : protocol_events<MessageSubscriber>(network, channel, name),
     perpetual_(perpetual)
 {
 }
@@ -43,16 +44,18 @@ protocol_timer::protocol_timer(p2p& network, channel::ptr channel,
 // ----------------------------------------------------------------------------
 
 // protected:
-void protocol_timer::start(const asio::duration& timeout,
+template<class MessageSubscriber>
+void protocol_timer<MessageSubscriber>::start(const asio::duration& timeout,
     event_handler handle_event)
 {
     // The deadline timer is thread safe.
-    timer_ = std::make_shared<deadline>(pool(), timeout);
-    protocol_events::start(BIND2(handle_notify, _1, handle_event));
+    timer_ = std::make_shared<deadline>(this->pool(), timeout);
+    protocol_events<MessageSubscriber>::start(BIND2(handle_notify, _1, handle_event));
     reset_timer();
 }
 
-void protocol_timer::handle_notify(const code& ec, event_handler handler)
+template<class MessageSubscriber>
+void protocol_timer<MessageSubscriber>::handle_notify(const code& ec, event_handler handler)
 {
     if (ec == error::channel_stopped)
         timer_->stop();
@@ -64,30 +67,34 @@ void protocol_timer::handle_notify(const code& ec, event_handler handler)
 // ----------------------------------------------------------------------------
 
 // protected:
-void protocol_timer::reset_timer()
+template<class MessageSubscriber>
+void protocol_timer<MessageSubscriber>::reset_timer()
 {
-    if (stopped())
+    if (this->stopped())
         return;
 
     timer_->start(BIND1(handle_timer, _1));
 }
 
-void protocol_timer::handle_timer(const code& ec)
+template<class MessageSubscriber>
+void protocol_timer<MessageSubscriber>::handle_timer(const code& ec)
 {
-    if (stopped())
+    if (this->stopped())
         return;
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Fired protocol_" << name() << " timer on [" << authority() << "] "
+        << "Fired protocol_" << this->name() << " timer on [" << this->authority() << "] "
         << ec.message();
 
     // The handler completes before the timer is reset.
-    set_event(error::channel_timeout);
+    this->set_event(error::channel_timeout);
 
     // A perpetual timer resets itself until the channel is stopped.
     if (perpetual_)
         reset_timer();
 }
+
+template class protocol_timer<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

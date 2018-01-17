@@ -23,50 +23,52 @@
 #include <memory>
 #include <vector>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/acceptor.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/sessions/session.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/acceptor.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/sessions/session.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /// Inbound connections session, thread safe.
+template <class MessageSubscriber>
 class BCT_API session_inbound
-  : public session, track<session_inbound>
+  : public session<MessageSubscriber>, track<session_inbound<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<session_inbound> ptr;
+    typedef std::shared_ptr<session_inbound<MessageSubscriber>> ptr;
+    typedef typename session<MessageSubscriber>::result_handler result_handler;
 
     /// Construct an instance.
-    session_inbound(p2p& network, bool notify_on_connect);
+    session_inbound(p2p<MessageSubscriber>& network, bool notify_on_connect);
 
     /// Start the session.
     void start(result_handler handler) override;
 
 protected:
     /// Overridden to implement pending test for inbound channels.
-    void handshake_complete(channel::ptr channel,
+    void handshake_complete(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started) override;
 
     /// Override to attach specialized protocols upon channel start.
-    virtual void attach_protocols(channel::ptr channel);
+    virtual void attach_protocols(typename channel<MessageSubscriber>::ptr channel);
 
 private:
     void start_accept(const code& ec);
 
     void handle_stop(const code& ec);
     void handle_started(const code& ec, result_handler handler);
-    void handle_accept(const code& ec, channel::ptr channel);
+    void handle_accept(const code& ec, typename channel<MessageSubscriber>::ptr channel);
 
-    void handle_channel_start(const code& ec, channel::ptr channel);
+    void handle_channel_start(const code& ec, typename channel<MessageSubscriber>::ptr channel);
     void handle_channel_stop(const code& ec);
 
     // These are thread safe.
-    acceptor::ptr acceptor_;
+    typename acceptor<MessageSubscriber>::ptr acceptor_;
     const size_t connection_limit_;
 };
 

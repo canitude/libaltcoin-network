@@ -16,14 +16,14 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/hosts.hpp>
+#include <altcoin/network/hosts.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <string>
 #include <vector>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -81,6 +81,27 @@ code hosts::fetch(address& out) const
     const auto random = pseudo_random(0, buffer_.size() - 1);
     const auto index = static_cast<size_t>(random);
     out = buffer_[index];
+    return error::success;
+    ///////////////////////////////////////////////////////////////////////////
+}
+
+code hosts::for_each(address_handler handler) const
+{
+    if (disabled_)
+        return error::not_found;
+
+    // Critical Section
+    ///////////////////////////////////////////////////////////////////////////
+    unique_lock lock(mutex_);
+
+    if (stopped_)
+        return error::service_stopped;
+
+    for (const auto addr : buffer_)
+    {
+        handler(addr);
+    }
+
     return error::success;
     ///////////////////////////////////////////////////////////////////////////
 }

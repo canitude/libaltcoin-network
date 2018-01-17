@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -43,6 +43,7 @@ public:
     typedef std::shared_ptr<hosts> ptr;
     typedef message::network_address address;
     typedef handle0 result_handler;
+    typedef std::function<void(const address&)> address_handler;
 
     /// Construct an instance.
     hosts(const settings& settings);
@@ -55,6 +56,7 @@ public:
 
     virtual size_t count() const;
     virtual code fetch(address& out) const;
+    virtual code for_each(address_handler) const;
     virtual code remove(const address& host);
     virtual code store(const address& host);
     virtual void store(const address::list& hosts, result_handler handler);

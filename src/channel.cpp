@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/channel.hpp>
+#include <altcoin/network/channel.hpp>
 
 #include <atomic>
 #include <cstddef>
@@ -25,8 +25,8 @@
 #include <memory>
 #include <utility>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/proxy.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/proxy.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -40,14 +40,15 @@ static deadline::ptr alarm(threadpool& pool, const asio::duration& duration)
     return std::make_shared<deadline>(pool, pseudo_randomize(duration));
 }
 
-channel::channel(threadpool& pool, socket::ptr socket,
+template<class MessageSubscriber>
+channel<MessageSubscriber>::channel(threadpool& pool, socket::ptr socket,
     const settings& settings)
-  : proxy(pool, socket, settings),
+  : proxy<MessageSubscriber>(pool, socket, settings),
     notify_(false),
     nonce_(0),
     expiration_(alarm(pool, settings.channel_expiration())),
     inactivity_(alarm(pool, settings.channel_inactivity())),
-    CONSTRUCT_TRACK(channel)
+    CONSTRUCT_TRACK(channel<MessageSubscriber>)
 {
 }
 
@@ -55,15 +56,17 @@ channel::channel(threadpool& pool, socket::ptr socket,
 // ----------------------------------------------------------------------------
 
 // public:
-void channel::start(result_handler handler)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::start(result_handler handler)
 {
-    proxy::start(
-        std::bind(&channel::do_start,
-            shared_from_base<channel>(), _1, handler));
+    proxy<MessageSubscriber>::start(
+        std::bind(&channel<MessageSubscriber>::do_start,
+            channel<MessageSubscriber>::template shared_from_base<channel<MessageSubscriber>>(), _1, handler));
 }
 
 // Don't start the timers until the socket is enabled.
-void channel::do_start(const code& ec, result_handler handler)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::do_start(const code& ec, result_handler handler)
 {
     start_expiration();
     start_inactivity();
@@ -73,34 +76,40 @@ void channel::do_start(const code& ec, result_handler handler)
 // Properties.
 // ----------------------------------------------------------------------------
 
-bool channel::notify() const
+template<class MessageSubscriber>
+bool channel<MessageSubscriber>::notify() const
 {
     return notify_;
 }
 
-void channel::set_notify(bool value)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::set_notify(bool value)
 {
     notify_ = value;
 }
 
-uint64_t channel::nonce() const
+template<class MessageSubscriber>
+uint64_t channel<MessageSubscriber>::nonce() const
 {
     return nonce_;
 }
 
-void channel::set_nonce(uint64_t value)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::set_nonce(uint64_t value)
 {
     nonce_.store(value);
 }
 
-version_const_ptr channel::peer_version() const
+template<class MessageSubscriber>
+version_const_ptr channel<MessageSubscriber>::peer_version() const
 {
     const auto version = peer_version_.load();
     BITCOIN_ASSERT_MSG(version, "Read peer version before set.");
     return version;
 }
 
-void channel::set_peer_version(version_const_ptr value)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::set_peer_version(version_const_ptr value)
 {
     peer_version_.store(value);
 }
@@ -109,67 +118,76 @@ void channel::set_peer_version(version_const_ptr value)
 // ----------------------------------------------------------------------------
 
 // It is possible that this may be called multiple times.
-void channel::handle_stopping()
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::handle_stopping()
 {
     expiration_->stop();
     inactivity_->stop();
 }
 
-void channel::signal_activity()
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::signal_activity()
 {
     start_inactivity();
 }
 
-bool channel::stopped(const code& ec) const
+template<class MessageSubscriber>
+bool channel<MessageSubscriber>::stopped(const code& ec) const
 {
-    return proxy::stopped() || ec == error::channel_stopped ||
+    return proxy<MessageSubscriber>::stopped() || ec == error::channel_stopped ||
         ec == error::service_stopped;
 }
 
 // Timers (these are inherent races, requiring stranding by stop only).
 // ----------------------------------------------------------------------------
 
-void channel::start_expiration()
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::start_expiration()
 {
-    if (proxy::stopped())
+    if (proxy<MessageSubscriber>::stopped())
         return;
 
     expiration_->start(
-        std::bind(&channel::handle_expiration,
-            shared_from_base<channel>(), _1));
+        std::bind(&channel<MessageSubscriber>::handle_expiration,
+            channel<MessageSubscriber>::template shared_from_base<channel<MessageSubscriber>>(), _1));
 }
 
-void channel::handle_expiration(const code& ec)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::handle_expiration(const code& ec)
 {
     if (stopped(ec))
         return;
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Channel lifetime expired [" << authority() << "]";
+        << "Channel lifetime expired [" << this->authority() << "]";
 
-    stop(error::channel_timeout);
+    this->stop(error::channel_timeout);
 }
 
-void channel::start_inactivity()
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::start_inactivity()
 {
-    if (proxy::stopped())
+    if (proxy<MessageSubscriber>::stopped())
         return;
 
     inactivity_->start(
-        std::bind(&channel::handle_inactivity,
-            shared_from_base<channel>(), _1));
+        std::bind(&channel<MessageSubscriber>::handle_inactivity,
+            channel<MessageSubscriber>::template shared_from_base<channel<MessageSubscriber>>(), _1));
 }
 
-void channel::handle_inactivity(const code& ec)
+template<class MessageSubscriber>
+void channel<MessageSubscriber>::handle_inactivity(const code& ec)
 {
     if (stopped(ec))
         return;
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Channel inactivity timeout [" << authority() << "]";
+        << "Channel inactivity timeout [" << this->authority() << "]";
 
-    stop(error::channel_timeout);
+    this->stop(error::channel_timeout);
 }
+
+template class channel<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

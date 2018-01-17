@@ -21,22 +21,24 @@
 
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/protocols/protocol_events.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/protocols/protocol_events.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /**
  * Base class for timed protocol implementation.
  */
+template <class MessageSubscriber>
 class BCT_API protocol_timer
-  : public protocol_events
+  : public protocol_events<MessageSubscriber>
 {
 protected:
+    typedef typename protocol_events<MessageSubscriber>::event_handler event_handler;
 
     /**
      * Construct a timed protocol instance.
@@ -45,7 +47,7 @@ protected:
      * @param[in]  perpetual  Set for automatic timer reset unless stopped.
      * @param[in]  name       The instance name for logging purposes.
      */
-    protocol_timer(p2p& network, channel::ptr channel, bool perpetual,
+    protocol_timer(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel, bool perpetual,
         const std::string& name);
 
     /**

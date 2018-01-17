@@ -16,36 +16,34 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef LIBBITCOIN_NETWORK_PROTOCOL_ADDRESS_31402_HPP
-#define LIBBITCOIN_NETWORK_PROTOCOL_ADDRESS_31402_HPP
+#ifndef LIBBITCOIN_NETWORK_PROTOCOL_REJECT_70002_HPP
+#define LIBBITCOIN_NETWORK_PROTOCOL_REJECT_70002_HPP
 
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/protocols/protocol_events.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/protocols/protocol_events.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
-/**
- * Address protocol.
- * Attach this to a channel immediately following handshake completion.
- */
-class BCT_API protocol_address_31402
-  : public protocol_events, track<protocol_address_31402>
+template <class MessageSubscriber>
+class BCT_API protocol_reject_70002
+  : public protocol_events<MessageSubscriber>, track<protocol_reject_70002<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<protocol_address_31402> ptr;
+    typedef std::shared_ptr<protocol_reject_70002<MessageSubscriber>> ptr;
+    typedef typename protocol_events<MessageSubscriber>::event_handler event_handler;
 
     /**
-     * Construct an address protocol instance.
+     * Construct a reject protocol for logging reject payloads.
      * @param[in]  network   The network interface.
-     * @param[in]  channel   The channel on which to start the protocol.
+     * @param[in]  channel   The channel for the protocol.
      */
-    protocol_address_31402(p2p& network, channel::ptr channel);
+    protocol_reject_70002(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel);
 
     /**
      * Start the protocol.
@@ -53,19 +51,12 @@ public:
     virtual void start();
 
 protected:
-    virtual void handle_stop(const code& ec);
-    virtual void handle_store_addresses(const code& ec);
-
-    virtual bool handle_receive_address(const code& ec,
-        address_const_ptr address);
-    virtual bool handle_receive_get_address(const code& ec,
-        get_address_const_ptr message);
-
-    p2p& network_;
-    const message::address self_;
+    virtual bool handle_receive_reject(const code& ec,
+        reject_const_ptr reject);
 };
 
 } // namespace network
 } // namespace libbitcoin
 
 #endif
+

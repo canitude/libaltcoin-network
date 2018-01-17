@@ -1,10 +1,10 @@
-[![Build Status](https://travis-ci.org/libbitcoin/libbitcoin-network.svg?branch=master)](https://travis-ci.org/libbitcoin/libbitcoin-network)
+[![Build Status](https://travis-ci.org/canitude/libaltcoin-network.svg?branch=version3)](https://travis-ci.org/canitude/libaltcoin-network)
 
-[![Coverage Status](https://coveralls.io/repos/libbitcoin/libbitcoin-network/badge.svg)](https://coveralls.io/r/libbitcoin/libbitcoin-network)
+[![Coverage Status](https://coveralls.io/repos/canitude/libaltcoin-network/badge.svg)](https://coveralls.io/r/canitude/libaltcoin-network)
 
-# Libbitcoin Network
+# Libaltcoin Network
 
-*Bitcoin P2P Network Library*
+*Altcoin P2P Network Library*
 
 Make sure you have installed [libbitcoin](https://github.com/libbitcoin/libbitcoin) beforehand according to its build instructions. 
 
@@ -16,7 +16,11 @@ $ sudo make install
 $ sudo ldconfig
 ```
 
-libbitcoin-network is now installed in `/usr/local/`.
+libaltcoin-network is now installed in `/usr/local/`.
+
+**Changes from Libbitcoin Network**
+
+message_subscriber class moved to template argument. This simplifies protocol extensions.
 
 **About Libbitcoin Network**
 

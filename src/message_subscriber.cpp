@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/message_subscriber.hpp>
+#include <altcoin/network/message_subscriber.hpp>
 
 #include <istream>
 #include <memory>
@@ -112,10 +112,10 @@ void message_subscriber::broadcast(const code& ec)
     RELAY_CODE(ec, version);
 }
 
-code message_subscriber::load(message_type type, uint32_t version,
+code message_subscriber::load(const heading& head, uint32_t version,
     std::istream& stream) const
 {
-    switch (type)
+    switch (head.type())
     {
         CASE_RELAY_MESSAGE(stream, version, address);
         CASE_RELAY_MESSAGE(stream, version, alert);

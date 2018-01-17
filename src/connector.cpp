@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/connector.hpp>
+#include <altcoin/network/connector.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -24,9 +24,9 @@
 #include <memory>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/proxy.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/proxy.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -36,7 +36,8 @@ namespace network {
 using namespace bc::config;
 using namespace std::placeholders;
 
-connector::connector(threadpool& pool, const settings& settings)
+template<class MessageSubscriber>
+connector<MessageSubscriber>::connector(threadpool& pool, const settings& settings)
   : stopped_(false),
     pool_(pool),
     settings_(settings),
@@ -46,12 +47,14 @@ connector::connector(threadpool& pool, const settings& settings)
 {
 }
 
-connector::~connector()
+template<class MessageSubscriber>
+connector<MessageSubscriber>::~connector()
 {
     BITCOIN_ASSERT_MSG(stopped(), "The connector was not stopped.");
 }
 
-void connector::stop(const code&)
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::stop(const code&)
 {
     // Critical Section
     ///////////////////////////////////////////////////////////////////////////
@@ -79,22 +82,26 @@ void connector::stop(const code&)
 }
 
 // private
-bool connector::stopped() const
+template<class MessageSubscriber>
+bool connector<MessageSubscriber>::stopped() const
 {
     return stopped_;
 }
 
-void connector::connect(const endpoint& endpoint, connect_handler handler)
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::connect(const endpoint& endpoint, connect_handler handler)
 {
     connect(endpoint.host(), endpoint.port(), handler);
 }
 
-void connector::connect(const authority& authority, connect_handler handler)
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::connect(const authority& authority, connect_handler handler)
 {
     connect(authority.to_hostname(), authority.port(), handler);
 }
 
-void connector::connect(const std::string& hostname, uint16_t port,
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::connect(const std::string& hostname, uint16_t port,
     connect_handler handler)
 {
     // Critical Section
@@ -116,14 +123,15 @@ void connector::connect(const std::string& hostname, uint16_t port,
 
     // async_resolve will not invoke the handler within this function.
     resolver_.async_resolve(*query_,
-        std::bind(&connector::handle_resolve,
-            shared_from_this(), _1, _2, handler));
+        std::bind(&connector<MessageSubscriber>::handle_resolve,
+            this->shared_from_this(), _1, _2, handler));
 
     mutex_.unlock();
     ///////////////////////////////////////////////////////////////////////////
 }
 
-void connector::handle_resolve(const boost_code& ec, asio::iterator iterator,
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::handle_resolve(const boost_code& ec, asio::iterator iterator,
     connect_handler handler)
 {
     using namespace boost::asio;
@@ -157,21 +165,22 @@ void connector::handle_resolve(const boost_code& ec, asio::iterator iterator,
 
     // timer.async_wait will not invoke the handler within this function.
     timer_->start(
-        std::bind(&connector::handle_timer,
-            shared_from_this(), _1, socket, join_handler));
+        std::bind(&connector<MessageSubscriber>::handle_timer,
+            this->shared_from_this(), _1, socket, join_handler));
 
     // async_connect will not invoke the handler within this function.
     // The bound delegate ensures handler completion before loss of scope.
     async_connect(socket->get(), iterator,
-        std::bind(&connector::handle_connect,
-            shared_from_this(), _1, _2, socket, join_handler));
+        std::bind(&connector<MessageSubscriber>::handle_connect,
+            this->shared_from_this(), _1, _2, socket, join_handler));
 
     mutex_.unlock_shared();
     ///////////////////////////////////////////////////////////////////////////
 }
 
 // private:
-void connector::handle_connect(const boost_code& ec, asio::iterator,
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::handle_connect(const boost_code& ec, asio::iterator,
     socket::ptr socket, connect_handler handler)
 {
     if (ec)
@@ -181,16 +190,19 @@ void connector::handle_connect(const boost_code& ec, asio::iterator,
     }
 
     // Ensure that channel is not passed as an r-value.
-    const auto created = std::make_shared<channel>(pool_, socket, settings_);
+    const auto created = std::make_shared<channel<MessageSubscriber>>(pool_, socket, settings_);
     handler(error::success, created);
 }
 
 // private:
-void connector::handle_timer(const code& ec, socket::ptr socket,
+template<class MessageSubscriber>
+void connector<MessageSubscriber>::handle_timer(const code& ec, socket::ptr socket,
     connect_handler handler)
 {
     handler(ec ? ec : error::channel_timeout, nullptr);
 }
+
+template class connector<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

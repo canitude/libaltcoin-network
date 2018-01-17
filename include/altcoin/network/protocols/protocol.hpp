@@ -24,15 +24,15 @@
 #include <string>
 #include <utility>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define PROTOCOL_ARGS(handler, args) \
     std::forward<Handler>(handler), \
-    shared_from_base<Protocol>(), \
+    this->template shared_from_base<Protocol>(), \
     std::forward<Args>(args)...
 #define BOUND_PROTOCOL(handler, args) \
     std::bind(PROTOCOL_ARGS(handler, args))
@@ -44,11 +44,12 @@ namespace network {
 #define BOUND_PROTOCOL_TYPE(handler, args) \
     std::bind(PROTOCOL_ARGS_TYPE(handler, args))
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /// Virtual base class for protocol implementation, mostly thread safe.
+template <class MessageSubscriber>
 class BCT_API protocol
-  : public enable_shared_from_base<protocol>, noncopyable
+  : public enable_shared_from_base<protocol<MessageSubscriber>>, noncopyable
 {
 protected:
     typedef std::function<void()> completion_handler;
@@ -56,7 +57,7 @@ protected:
     typedef std::function<void(const code&, size_t)> count_handler;
 
     /// Construct an instance.
-    protocol(p2p& network, channel::ptr channel, const std::string& name);
+    protocol(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel, const std::string& name);
 
     /// Bind a method in the derived class.
     template <class Protocol, typename Handler, typename... Args>
@@ -126,7 +127,7 @@ protected:
 private:
     threadpool& pool_;
     dispatcher dispatch_;
-    channel::ptr channel_;
+    typename channel<MessageSubscriber>::ptr channel_;
     const std::string name_;
 };
 
@@ -136,22 +137,22 @@ private:
 #undef BOUND_PROTOCOL_TYPE
 
 #define SEND1(message, method, p1) \
-    send<CLASS>(message, &CLASS::method, p1)
+    CLASS::template send<CLASS>(message, &CLASS::method, p1)
 #define SEND2(message, method, p1, p2) \
-    send<CLASS>(message, &CLASS::method, p1, p2)
+    CLASS::template send<CLASS>(message, &CLASS::method, p1, p2)
 #define SEND3(message, method, p1, p2, p3) \
-    send<CLASS>(message, &CLASS::method, p1, p2, p3)
+    CLASS::template send<CLASS>(message, &CLASS::method, p1, p2, p3)
 
 #define SUBSCRIBE2(message, method, p1, p2) \
-    subscribe<CLASS, message>(&CLASS::method, p1, p2)
+    CLASS::template subscribe<CLASS, message>(&CLASS::method, p1, p2)
 #define SUBSCRIBE3(message, method, p1, p2, p3) \
-    subscribe<CLASS, message>(&CLASS::method, p1, p2, p3)
+    CLASS::template subscribe<CLASS, message>(&CLASS::method, p1, p2, p3)
 
 #define SUBSCRIBE_STOP1(method, p1) \
-    subscribe_stop<CLASS>(&CLASS::method, p1)
+    CLASS::template subscribe_stop<CLASS>(&CLASS::method, p1)
 
 #define DISPATCH_CONCURRENT1(method, p1) \
-    dispatch_concurrent<CLASS>(&CLASS::method, p1)
+    CLASS::template dispatch_concurrent<CLASS>(&CLASS::method, p1)
 
 } // namespace network
 } // namespace libbitcoin

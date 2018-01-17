@@ -16,21 +16,22 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_address_31402.hpp>
+#include <altcoin/network/protocols/protocol_address_31402.hpp>
 
+#include <ctime>
 #include <functional>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol.hpp>
-#include <bitcoin/network/protocols/protocol_events.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol.hpp>
+#include <altcoin/network/protocols/protocol_events.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define NAME "address"
-#define CLASS protocol_address_31402
+#define CLASS protocol_address_31402<MessageSubscriber>
 
 using namespace bc::message;
 using namespace std::placeholders;
@@ -40,27 +41,38 @@ static message::address configured_self(const network::settings& settings)
     if (settings.self.port() == 0)
         return address{};
 
-    return address{ { settings.self.to_network_address() } };
+    network_address netaddr = settings.self.to_network_address();
+    netaddr.set_timestamp(static_cast<uint32_t>(time(nullptr)));
+    netaddr.set_services(settings.services);
+
+    network_address::list l;
+    l.push_back(netaddr);
+
+    return message::address(l);
 }
 
-protocol_address_31402::protocol_address_31402(p2p& network,
-    channel::ptr channel)
-  : protocol_events(network, channel, NAME),
+template<class MessageSubscriber>
+protocol_address_31402<MessageSubscriber>::protocol_address_31402(p2p<MessageSubscriber>& network,
+    typename channel<MessageSubscriber>::ptr channel)
+  : protocol_events<MessageSubscriber>(network, channel, NAME),
     network_(network),
     self_(configured_self(network_.network_settings())),
-    CONSTRUCT_TRACK(protocol_address_31402)
+    CONSTRUCT_TRACK(protocol_address_31402<MessageSubscriber>)
 {
 }
 
 // Start sequence.
 // ----------------------------------------------------------------------------
 
-void protocol_address_31402::start()
+class ZZZ { };
+
+template<class MessageSubscriber>
+void protocol_address_31402<MessageSubscriber>::start()
 {
     const auto& settings = network_.network_settings();
 
     // Must have a handler to capture a shared self pointer in stop subscriber.
-    protocol_events::start(BIND1(handle_stop, _1));
+    protocol_events<MessageSubscriber>::start(BIND1(handle_stop, _1));
 
     if (!self_.addresses().empty())
     {
@@ -79,14 +91,15 @@ void protocol_address_31402::start()
 // Protocol.
 // ----------------------------------------------------------------------------
 
-bool protocol_address_31402::handle_receive_address(const code& ec,
+template<class MessageSubscriber>
+bool protocol_address_31402<MessageSubscriber>::handle_receive_address(const code& ec,
     address_const_ptr message)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Storing addresses from [" << authority() << "] ("
+        << "Storing addresses from [" << this->authority() << "] ("
         << message->addresses().size() << ")";
 
     // TODO: manage timestamps (active channels are connected < 3 hours ago).
@@ -96,10 +109,11 @@ bool protocol_address_31402::handle_receive_address(const code& ec,
     return true;
 }
 
-bool protocol_address_31402::handle_receive_get_address(const code& ec,
+template<class MessageSubscriber>
+bool protocol_address_31402<MessageSubscriber>::handle_receive_get_address(const code& ec,
     get_address_const_ptr message)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     // TODO: allowing repeated queries can allow a channel to map our history.
@@ -111,7 +125,7 @@ bool protocol_address_31402::handle_receive_get_address(const code& ec,
         return false;
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Sending addresses to [" << authority() << "] ("
+        << "Sending addresses to [" << this->authority() << "] ("
         << self_.addresses().size() << ")";
 
     SEND2(self_, handle_send, _1, self_.command);
@@ -120,26 +134,30 @@ bool protocol_address_31402::handle_receive_get_address(const code& ec,
     return true;
 }
 
-void protocol_address_31402::handle_store_addresses(const code& ec)
+template<class MessageSubscriber>
+void protocol_address_31402<MessageSubscriber>::handle_store_addresses(const code& ec)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return;
 
     if (ec)
     {
         LOG_ERROR(LOG_NETWORK)
-            << "Failure storing addresses from [" << authority() << "] "
+            << "Failure storing addresses from [" << this->authority() << "] "
             << ec.message();
-        stop(ec);
+        this->stop(ec);
     }
 }
 
-void protocol_address_31402::handle_stop(const code&)
+template<class MessageSubscriber>
+void protocol_address_31402<MessageSubscriber>::handle_stop(const code&)
 {
     // None of the other bc::network protocols log their stop.
     ////LOG_DEBUG(LOG_NETWORK)
     ////    << "Stopped address protocol for [" << authority() << "].";
 }
+
+template class protocol_address_31402<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

@@ -22,7 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/define.hpp>
+#include <altcoin/network/define.hpp>
 
 namespace libbitcoin {
 namespace network {

@@ -16,16 +16,16 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/acceptor.hpp>
+#include <altcoin/network/acceptor.hpp>
 
 #include <cstdint>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/proxy.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/proxy.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -36,7 +36,8 @@ using namespace std::placeholders;
 
 static const auto reuse_address = asio::acceptor::reuse_address(true);
 
-acceptor::acceptor(threadpool& pool, const settings& settings)
+template<class MessageSubscriber>
+acceptor<MessageSubscriber>::acceptor(threadpool& pool, const settings& settings)
   : stopped_(true),
     pool_(pool),
     settings_(settings),
@@ -46,12 +47,14 @@ acceptor::acceptor(threadpool& pool, const settings& settings)
 {
 }
 
-acceptor::~acceptor()
+template<class MessageSubscriber>
+acceptor<MessageSubscriber>::~acceptor()
 {
     BITCOIN_ASSERT_MSG(stopped(), "The acceptor was not stopped.");
 }
 
-void acceptor::stop(const code&)
+template<class MessageSubscriber>
+void acceptor<MessageSubscriber>::stop(const code&)
 {
     // Critical Section
     ///////////////////////////////////////////////////////////////////////////
@@ -76,13 +79,15 @@ void acceptor::stop(const code&)
 }
 
 // private
-bool acceptor::stopped() const
+template<class MessageSubscriber>
+bool acceptor<MessageSubscriber>::stopped() const
 {
     return stopped_;
 }
 
 // This is hardwired to listen on IPv6.
-code acceptor::listen(uint16_t port)
+template<class MessageSubscriber>
+code acceptor<MessageSubscriber>::listen(uint16_t port)
 {
     // Critical Section
     ///////////////////////////////////////////////////////////////////////////
@@ -119,7 +124,8 @@ code acceptor::listen(uint16_t port)
     return error::boost_to_error_code(error);
 }
 
-void acceptor::accept(accept_handler handler)
+template<class MessageSubscriber>
+void acceptor<MessageSubscriber>::accept(accept_handler handler)
 {
     // Critical Section
     ///////////////////////////////////////////////////////////////////////////
@@ -144,14 +150,15 @@ void acceptor::accept(accept_handler handler)
     // to the thread of the socket, then this is unnecessary.
     acceptor_.async_accept(socket->get(),
         std::bind(&acceptor::handle_accept,
-            shared_from_this(), _1, socket, handler));
+            this->shared_from_this(), _1, socket, handler));
 
     mutex_.unlock();
     ///////////////////////////////////////////////////////////////////////////
 }
 
 // private:
-void acceptor::handle_accept(const boost_code& ec, socket::ptr socket,
+template<class MessageSubscriber>
+void acceptor<MessageSubscriber>::handle_accept(const boost_code& ec, socket::ptr socket,
     accept_handler handler)
 {
     if (ec)
@@ -161,9 +168,11 @@ void acceptor::handle_accept(const boost_code& ec, socket::ptr socket,
     }
 
     // Ensure that channel is not passed as an r-value.
-    const auto created = std::make_shared<channel>(pool_, socket, settings_);
+    const auto created = std::make_shared<channel<MessageSubscriber>>(pool_, socket, settings_);
     handler(error::success, created);
 }
+
+template class acceptor<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

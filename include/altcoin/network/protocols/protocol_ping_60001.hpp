@@ -16,49 +16,53 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef LIBBITCOIN_NETWORK_PROTOCOL_PING_31402_HPP
-#define LIBBITCOIN_NETWORK_PROTOCOL_PING_31402_HPP
+#ifndef LIBBITCOIN_NETWORK_PROTOCOL_PING_60001_HPP
+#define LIBBITCOIN_NETWORK_PROTOCOL_PING_60001_HPP
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/protocols/protocol_timer.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/protocols/protocol_ping_31402.hpp>
+#include <altcoin/network/protocols/protocol_timer.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /**
  * Ping-pong protocol.
  * Attach this to a channel immediately following handshake completion.
  */
-class BCT_API protocol_ping_31402
-  : public protocol_timer, track<protocol_ping_31402>
+template <class MessageSubscriber>
+class BCT_API protocol_ping_60001
+  : public protocol_ping_31402<MessageSubscriber>, track<protocol_ping_60001<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<protocol_ping_31402> ptr;
+    typedef std::shared_ptr<protocol_ping_60001<MessageSubscriber>> ptr;
+    typedef typename protocol_ping_31402<MessageSubscriber>::event_handler event_handler;
 
     /**
      * Construct a ping protocol instance.
      * @param[in]  network   The network interface.
      * @param[in]  channel   The channel on which to start the protocol.
      */
-    protocol_ping_31402(p2p& network, channel::ptr channel);
-
-    /**
-     * Start the protocol.
-     */
-    virtual void start();
+    protocol_ping_60001(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel);
 
 protected:
-    virtual void send_ping(const code& ec);
+    void send_ping(const code& ec) override;
 
-    virtual bool handle_receive_ping(const code& ec, ping_const_ptr message);
+    void handle_send_ping(const code& ec, const std::string& command);
+    bool handle_receive_ping(const code& ec, ping_const_ptr message) override;
+    virtual bool handle_receive_pong(const code& ec, pong_const_ptr message,
+        uint64_t nonce);
 
-    const settings& settings_;
+private:
+    std::atomic<bool> pending_;
 };
 
 } // namespace network

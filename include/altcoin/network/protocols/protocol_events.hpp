@@ -21,22 +21,25 @@
 
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/protocols/protocol.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/protocols/protocol.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /**
  * Base class for stateful protocol implementation, thread and lock safe.
  */
+template <class MessageSubscriber>
 class BCT_API protocol_events
-  : public protocol
+  : public protocol<MessageSubscriber>
 {
 protected:
+    typedef typename protocol<MessageSubscriber>::event_handler event_handler;
+    typedef typename protocol<MessageSubscriber>::completion_handler completion_handler;
 
     /**
      * Construct a protocol instance.
@@ -44,7 +47,7 @@ protected:
      * @param[in]  channel   The channel on which to start the protocol.
      * @param[in]  name      The instance name for logging purposes.
      */
-    protocol_events(p2p& network, channel::ptr channel,
+    protocol_events(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel,
         const std::string& name);
 
     /**

@@ -27,19 +27,21 @@
 #include <string>
 #include <utility>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/message_subscriber.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/message_subscriber.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 /// Manages all socket communication, thread safe.
+template <class MessageSubscriber>
 class BCT_API proxy
-  : public enable_shared_from_base<proxy>, noncopyable
+  : public enable_shared_from_base<proxy<MessageSubscriber>>, noncopyable
 {
 public:
-    typedef std::shared_ptr<proxy> ptr;
+    typedef proxy<MessageSubscriber> proxy_class;
+    typedef std::shared_ptr<proxy_class> ptr;
     typedef std::function<void(const code&)> result_handler;
     typedef subscriber<code> stop_subscriber;
 
@@ -60,14 +62,14 @@ public:
         // Sequential dispatch is required because write may occur in multiple
         // asynchronous steps invoked on different threads, causing deadlocks.
         dispatch_.lock(&proxy::do_send,
-            shared_from_this(), command, payload, handler);
+            this->shared_from_this(), command, payload, handler);
     }
 
     /// Subscribe to messages of the specified type on the socket.
     template <class Message>
     void subscribe(message_handler<Message>&& handler)
     {
-        message_subscriber_.subscribe<Message>(
+        message_subscriber_.template subscribe<Message>(
             std::forward<message_handler<Message>>(handler));
     }
 
@@ -132,7 +134,7 @@ private:
     const bool validate_checksum_;
     const bool verbose_;
     std::atomic<uint32_t> version_;
-    message_subscriber message_subscriber_;
+    MessageSubscriber message_subscriber_;
     stop_subscriber::ptr stop_subscriber_;
     dispatcher dispatch_;
 };

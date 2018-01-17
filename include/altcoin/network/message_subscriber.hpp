@@ -26,7 +26,7 @@
 #include <utility>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/define.hpp>
+#include <altcoin/network/define.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -155,12 +155,12 @@ public:
      * Load a stream of the specified command type.
      * Creates an instance of the indicated message type.
      * Sends the message instance to each subscriber of the type.
-     * @param[in]  type     The stream message type identifier.
+     * @param[in]  head     The stream message header.
      * @param[in]  version  The peer protocol version.
      * @param[in]  stream   The stream from which to load the message.
      * @return              Returns error::bad_stream if failed.
      */
-    virtual code load(message::message_type type, uint32_t version,
+    virtual code load(const bc::message::heading& head, uint32_t version,
         std::istream& stream) const;
 
     /**

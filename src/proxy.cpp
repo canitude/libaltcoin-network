@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/proxy.hpp>
+#include <altcoin/network/proxy.hpp>
 
 #define BOOST_BIND_NO_PLACEHOLDERS
 
@@ -28,8 +28,8 @@
 #include <memory>
 #include <utility>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -46,7 +46,8 @@ static const size_t invalid_payload_dump_size = 1024;
 // payload_buffer_ sizing assumes monotonically increasing size by version.
 // Initialize to pre-witness max payload and let grow to witness as required.
 // The socket owns the single thread on which this channel reads and writes.
-proxy::proxy(threadpool& pool, socket::ptr socket, const settings& settings)
+template<class MessageSubscriber>
+proxy<MessageSubscriber>::proxy(threadpool& pool, socket::ptr socket, const settings& settings)
   : authority_(socket->authority()),
     heading_buffer_(heading::maximum_size()),
     payload_buffer_(heading::maximum_payload_size(settings.protocol_maximum, false)),
@@ -64,7 +65,8 @@ proxy::proxy(threadpool& pool, socket::ptr socket, const settings& settings)
 {
 }
 
-proxy::~proxy()
+template<class MessageSubscriber>
+proxy<MessageSubscriber>::~proxy()
 {
     BITCOIN_ASSERT_MSG(stopped(), "The channel was not stopped.");
 }
@@ -72,17 +74,20 @@ proxy::~proxy()
 // Properties.
 // ----------------------------------------------------------------------------
 
-const config::authority& proxy::authority() const
+template<class MessageSubscriber>
+const config::authority& proxy<MessageSubscriber>::authority() const
 {
     return authority_;
 }
 
-uint32_t proxy::negotiated_version() const
+template<class MessageSubscriber>
+uint32_t proxy<MessageSubscriber>::negotiated_version() const
 {
     return version_.load();
 }
 
-void proxy::set_negotiated_version(uint32_t value)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::set_negotiated_version(uint32_t value)
 {
     version_.store(value);
 }
@@ -90,7 +95,8 @@ void proxy::set_negotiated_version(uint32_t value)
 // Start sequence.
 // ----------------------------------------------------------------------------
 
-void proxy::start(result_handler handler)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::start(result_handler handler)
 {
     if (!stopped())
     {
@@ -112,7 +118,8 @@ void proxy::start(result_handler handler)
 // Stop subscription.
 // ----------------------------------------------------------------------------
 
-void proxy::subscribe_stop(result_handler handler)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::subscribe_stop(result_handler handler)
 {
     stop_subscriber_->subscribe(handler, error::channel_stopped);
 }
@@ -120,17 +127,19 @@ void proxy::subscribe_stop(result_handler handler)
 // Read cycle (read continues until stop).
 // ----------------------------------------------------------------------------
 
-void proxy::read_heading()
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::read_heading()
 {
     if (stopped())
         return;
 
     async_read(socket_->get(), buffer(heading_buffer_),
-        std::bind(&proxy::handle_read_heading,
-            shared_from_this(), _1, _2));
+        std::bind(&proxy<MessageSubscriber>::handle_read_heading,
+            proxy<MessageSubscriber>::shared_from_this(), _1, _2));
 }
 
-void proxy::handle_read_heading(const boost_code& ec, size_t)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::handle_read_heading(const boost_code& ec, size_t)
 {
     if (stopped())
         return;
@@ -177,7 +186,8 @@ void proxy::handle_read_heading(const boost_code& ec, size_t)
     read_payload(head);
 }
 
-void proxy::read_payload(const heading& head)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::read_payload(const heading& head)
 {
     if (stopped())
         return;
@@ -186,11 +196,12 @@ void proxy::read_payload(const heading& head)
     payload_buffer_.resize(head.payload_size());
 
     async_read(socket_->get(), buffer(payload_buffer_),
-        std::bind(&proxy::handle_read_payload,
-            shared_from_this(), _1, _2, head));
+        std::bind(&proxy<MessageSubscriber>::handle_read_payload,
+            proxy<MessageSubscriber>::shared_from_this(), _1, _2, head));
 }
 
-void proxy::handle_read_payload(const boost_code& ec, size_t payload_size,
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::handle_read_payload(const boost_code& ec, size_t payload_size,
     const heading& head)
 {
     if (stopped())
@@ -221,7 +232,7 @@ void proxy::handle_read_payload(const boost_code& ec, size_t payload_size,
     payload_stream istream(source);
 
     // Failures are not forwarded to subscribers and channel is stopped below.
-    const auto code = message_subscriber_.load(head.type(), version_, istream);
+    const auto code = message_subscriber_.load(head, version_, istream);
     const auto consumed = istream.peek() == std::istream::traits_type::eof();
 
     if (verbose_ && code)
@@ -265,15 +276,17 @@ void proxy::handle_read_payload(const boost_code& ec, size_t payload_size,
 // Message send sequence.
 // ----------------------------------------------------------------------------
 
-void proxy::do_send(command_ptr command, payload_ptr payload,
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::do_send(command_ptr command, payload_ptr payload,
     result_handler handler)
 {
     async_write(socket_->get(), buffer(*payload),
-        std::bind(&proxy::handle_send,
-            shared_from_this(), _1, _2, command, payload, handler));
+        std::bind(&proxy<MessageSubscriber>::handle_send,
+            proxy<MessageSubscriber>::shared_from_this(), _1, _2, command, payload, handler));
 }
 
-void proxy::handle_send(const boost_code& ec, size_t, command_ptr command,
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::handle_send(const boost_code& ec, size_t, command_ptr command,
     payload_ptr payload, result_handler handler)
 {
     dispatch_.unlock();
@@ -310,7 +323,8 @@ void proxy::handle_send(const boost_code& ec, size_t, command_ptr command,
 // completes at least once before invoking the handler. That would require a
 // lock be taken around the entire section, which poses a deadlock risk.
 // Instead this is thread safe and idempotent, allowing it to be unguarded.
-void proxy::stop(const code& ec)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::stop(const code& ec)
 {
     BITCOIN_ASSERT_MSG(ec, "The stop code must be an error code.");
 
@@ -331,15 +345,19 @@ void proxy::stop(const code& ec)
     socket_->stop();
 }
 
-void proxy::stop(const boost_code& ec)
+template<class MessageSubscriber>
+void proxy<MessageSubscriber>::stop(const boost_code& ec)
 {
     stop(error::boost_to_error_code(ec));
 }
 
-bool proxy::stopped() const
+template<class MessageSubscriber>
+bool proxy<MessageSubscriber>::stopped() const
 {
     return stopped_;
 }
+
+template class proxy<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

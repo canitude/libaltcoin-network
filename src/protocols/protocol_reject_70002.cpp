@@ -16,39 +16,41 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_reject_70002.hpp>
+#include <altcoin/network/protocols/protocol_reject_70002.hpp>
 
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol_events.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol_events.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define NAME "reject"
-#define CLASS protocol_reject_70002
+#define CLASS protocol_reject_70002<MessageSubscriber>
 
 using namespace bc::message;
 using namespace std::placeholders;
 
-protocol_reject_70002::protocol_reject_70002(p2p& network,
-    channel::ptr channel)
-  : protocol_events(network, channel, NAME),
-    CONSTRUCT_TRACK(protocol_reject_70002)
+template<class MessageSubscriber>
+protocol_reject_70002<MessageSubscriber>::protocol_reject_70002(p2p<MessageSubscriber>& network,
+    typename channel<MessageSubscriber>::ptr channel)
+  : protocol_events<MessageSubscriber>(network, channel, NAME),
+    CONSTRUCT_TRACK(protocol_reject_70002<MessageSubscriber>)
 {
 }
 
 // Start sequence.
 // ----------------------------------------------------------------------------
 
-void protocol_reject_70002::start()
+template<class MessageSubscriber>
+void protocol_reject_70002<MessageSubscriber>::start()
 {
-    protocol_events::start();
+    protocol_events<MessageSubscriber>::start();
 
     SUBSCRIBE2(reject, handle_receive_reject, _1, _2);
 }
@@ -57,18 +59,19 @@ void protocol_reject_70002::start()
 // ----------------------------------------------------------------------------
 
 // TODO: mitigate log fill DOS.
-bool protocol_reject_70002::handle_receive_reject(const code& ec,
+template<class MessageSubscriber>
+bool protocol_reject_70002<MessageSubscriber>::handle_receive_reject(const code& ec,
     reject_const_ptr reject)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure receiving reject from [" << authority() << "] "
+            << "Failure receiving reject from [" << this->authority() << "] "
             << ec.message();
-        stop(error::channel_stopped);
+        this->stop(error::channel_stopped);
         return false;
     }
 
@@ -85,10 +88,12 @@ bool protocol_reject_70002::handle_receive_reject(const code& ec,
     const auto code = reject->code();
     LOG_DEBUG(LOG_NETWORK)
         << "Received " << message << " reject (" << static_cast<uint16_t>(code)
-        << ") from [" << authority() << "] '" << reject->reason()
+        << ") from [" << this->authority() << "] '" << reject->reason()
         << "'" << hash;
     return true;
 }
+
+template class protocol_reject_70002<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

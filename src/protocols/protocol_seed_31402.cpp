@@ -16,36 +16,38 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_seed_31402.hpp>
+#include <altcoin/network/protocols/protocol_seed_31402.hpp>
 
 #include <functional>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol_timer.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol_timer.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define NAME "seed"
-#define CLASS protocol_seed_31402
+#define CLASS protocol_seed_31402<MessageSubscriber>
 
 using namespace bc::message;
 using namespace std::placeholders;
 
 // Require three callbacks (or any error) before calling complete.
-protocol_seed_31402::protocol_seed_31402(p2p& network, channel::ptr channel)
-  : protocol_timer(network, channel, false, NAME),
+template<class MessageSubscriber>
+protocol_seed_31402<MessageSubscriber>::protocol_seed_31402(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel)
+  : protocol_timer<MessageSubscriber>(network, channel, false, NAME),
     network_(network),
-    CONSTRUCT_TRACK(protocol_seed_31402)
+    CONSTRUCT_TRACK(protocol_seed_31402<MessageSubscriber>)
 {
 }
 
 // Start sequence.
 // ----------------------------------------------------------------------------
 
-void protocol_seed_31402::start(event_handler handler)
+template<class MessageSubscriber>
+void protocol_seed_31402<MessageSubscriber>::start(event_handler handler)
 {
     const auto& settings = network_.network_settings();
     const event_handler complete = BIND2(handle_seeding_complete, _1, handler);
@@ -59,7 +61,7 @@ void protocol_seed_31402::start(event_handler handler)
     const auto join_handler = synchronize(complete, 3, NAME,
         synchronizer_terminate::on_error);
 
-    protocol_timer::start(settings.channel_germination(), join_handler);
+    protocol_timer<MessageSubscriber>::start(settings.channel_germination(), join_handler);
 
     SUBSCRIBE2(address, handle_receive_address, _1, _2);
     send_own_address(settings);
@@ -69,11 +71,12 @@ void protocol_seed_31402::start(event_handler handler)
 // Protocol.
 // ----------------------------------------------------------------------------
 
-void protocol_seed_31402::send_own_address(const settings& settings)
+template<class MessageSubscriber>
+void protocol_seed_31402<MessageSubscriber>::send_own_address(const settings& settings)
 {
     if (settings.self.port() == 0)
     {
-        set_event(error::success);
+        this->set_event(error::success);
         return;
     }
 
@@ -83,21 +86,23 @@ void protocol_seed_31402::send_own_address(const settings& settings)
     SEND1(self, handle_send_address, _1);
 }
 
-void protocol_seed_31402::handle_seeding_complete(const code& ec,
+template<class MessageSubscriber>
+void protocol_seed_31402<MessageSubscriber>::handle_seeding_complete(const code& ec,
     event_handler handler)
 {
     handler(ec);
-    stop(ec);
+    this->stop(ec);
 }
 
-bool protocol_seed_31402::handle_receive_address(const code& ec,
+template<class MessageSubscriber>
+bool protocol_seed_31402<MessageSubscriber>::handle_receive_address(const code& ec,
     address_const_ptr message)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Storing addresses from seed [" << authority() << "] ("
+        << "Storing addresses from seed [" << this->authority() << "] ("
         << message->addresses().size() << ")";
 
     // TODO: manage timestamps (active channels are connected < 3 hours ago).
@@ -105,53 +110,58 @@ bool protocol_seed_31402::handle_receive_address(const code& ec,
     return false;
 }
 
-void protocol_seed_31402::handle_send_address(const code& ec)
+template<class MessageSubscriber>
+void protocol_seed_31402<MessageSubscriber>::handle_send_address(const code& ec)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return;
 
     // 1 of 3
-    set_event(error::success);
+    this->set_event(error::success);
 }
 
-void protocol_seed_31402::handle_send_get_address(const code& ec)
+template<class MessageSubscriber>
+void protocol_seed_31402<MessageSubscriber>::handle_send_get_address(const code& ec)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure sending get_address to seed [" << authority() << "] "
+            << "Failure sending get_address to seed [" << this->authority() << "] "
             << ec.message();
-        set_event(ec);
+        this->set_event(ec);
         return;
     }
 
     // 2 of 3
-    set_event(error::success);
+    this->set_event(error::success);
 }
 
-void protocol_seed_31402::handle_store_addresses(const code& ec)
+template<class MessageSubscriber>
+void protocol_seed_31402<MessageSubscriber>::handle_store_addresses(const code& ec)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return;
 
     if (ec)
     {
         LOG_ERROR(LOG_NETWORK)
-            << "Failure storing addresses from seed [" << authority() << "] "
+            << "Failure storing addresses from seed [" << this->authority() << "] "
             << ec.message();
-        set_event(ec);
+        this->set_event(ec);
         return;
     }
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Stopping completed seed [" << authority() << "] ";
+        << "Stopping completed seed [" << this->authority() << "] ";
 
     // 3 of 3
-    set_event(error::channel_stopped);
+    this->set_event(error::channel_stopped);
 }
+
+template class protocol_seed_31402<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

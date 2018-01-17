@@ -26,20 +26,22 @@
 #include <utility>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/message_subscriber.hpp>
-#include <bitcoin/network/proxy.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/message_subscriber.hpp>
+#include <altcoin/network/proxy.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 /// A concrete proxy with timers and state, mostly thread safe.
+template <class MessageSubscriber>
 class BCT_API channel
-  : public proxy, track<channel>
+  : public proxy<MessageSubscriber>, track<channel<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<channel> ptr;
+    typedef std::shared_ptr<channel<MessageSubscriber>> ptr;
+    typedef typename proxy<MessageSubscriber>::result_handler result_handler;
 
     /// Construct an instance.
     channel(threadpool& pool, socket::ptr socket, const settings& settings);

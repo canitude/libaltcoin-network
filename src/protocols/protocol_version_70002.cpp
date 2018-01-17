@@ -16,20 +16,20 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_version_70002.hpp>
+#include <altcoin/network/protocols/protocol_version_70002.hpp>
 
 #include <cstdint>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol_version_31402.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol_version_31402.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define NAME "version"
-#define CLASS protocol_version_70002
+#define CLASS protocol_version_70002<MessageSubscriber>
 
 using namespace bc::message;
 using namespace std::placeholders;
@@ -40,8 +40,9 @@ static const std::string insufficient_services = "insufficient-services";
 // TODO: set explicitly on inbound (none or new config) and self on outbound.
 // Configured services was our but we found that most incoming connections are
 // set to zero, so that is currently the default (see below).
-protocol_version_70002::protocol_version_70002(p2p& network,
-    channel::ptr channel)
+template<class MessageSubscriber>
+protocol_version_70002<MessageSubscriber>::protocol_version_70002(p2p<MessageSubscriber>& network,
+    typename channel<MessageSubscriber>::ptr channel)
   : protocol_version_70002(network, channel,
         network.network_settings().protocol_maximum,
         network.network_settings().services,
@@ -52,30 +53,33 @@ protocol_version_70002::protocol_version_70002(p2p& network,
 {
 }
 
-protocol_version_70002::protocol_version_70002(p2p& network,
-    channel::ptr channel, uint32_t own_version, uint64_t own_services,
+template<class MessageSubscriber>
+protocol_version_70002<MessageSubscriber>::protocol_version_70002(p2p<MessageSubscriber>& network,
+    typename channel<MessageSubscriber>::ptr channel, uint32_t own_version, uint64_t own_services,
     uint64_t invalid_services, uint32_t minimum_version,
     uint64_t minimum_services, bool relay)
-  : protocol_version_31402(network, channel, own_version, own_services,
+  : protocol_version_31402<MessageSubscriber>(network, channel, own_version, own_services,
         invalid_services, minimum_version, minimum_services),
     relay_(relay),
-    CONSTRUCT_TRACK(protocol_version_70002)
+    CONSTRUCT_TRACK(protocol_version_70002<MessageSubscriber>)
 {
 }
 
 // Start sequence.
 // ----------------------------------------------------------------------------
 
-void protocol_version_70002::start(event_handler handler)
+template<class MessageSubscriber>
+void protocol_version_70002<MessageSubscriber>::start(event_handler handler)
 {
-    protocol_version_31402::start(handler);
+    protocol_version_31402<MessageSubscriber>::start(handler);
 
     SUBSCRIBE2(reject, handle_receive_reject, _1, _2);
 }
 
-message::version protocol_version_70002::version_factory() const
+template<class MessageSubscriber>
+message::version protocol_version_70002<MessageSubscriber>::version_factory() const
 {
-    auto version = protocol_version_31402::version_factory();
+    auto version = protocol_version_31402<MessageSubscriber>::version_factory();
 
     // This is the only difference at protocol level 70001.
     version.set_relay(relay_);
@@ -85,9 +89,10 @@ message::version protocol_version_70002::version_factory() const
 // Protocol.
 // ----------------------------------------------------------------------------
 
-bool protocol_version_70002::sufficient_peer(version_const_ptr message)
+template<class MessageSubscriber>
+bool protocol_version_70002<MessageSubscriber>::sufficient_peer(version_const_ptr message)
 {
-    if (message->value() < minimum_version_)
+    if (message->value() < this->minimum_version_)
     {
         const reject version_rejection
         {
@@ -98,7 +103,7 @@ bool protocol_version_70002::sufficient_peer(version_const_ptr message)
 
         SEND2(version_rejection, handle_send, _1, reject::command);
     }
-    else if ((message->services() & minimum_services_) != minimum_services_)
+    else if ((message->services() & this->minimum_services_) != this->minimum_services_)
     {
         const reject obsolete_rejection
         {
@@ -110,21 +115,22 @@ bool protocol_version_70002::sufficient_peer(version_const_ptr message)
         SEND2(obsolete_rejection, handle_send, _1, reject::command);
     }
 
-    return protocol_version_31402::sufficient_peer(message);
+    return protocol_version_31402<MessageSubscriber>::sufficient_peer(message);
 }
 
-bool protocol_version_70002::handle_receive_reject(const code& ec,
+template<class MessageSubscriber>
+bool protocol_version_70002<MessageSubscriber>::handle_receive_reject(const code& ec,
     reject_const_ptr reject)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure receiving reject from [" << authority() << "] "
+            << "Failure receiving reject from [" << this->authority() << "] "
             << ec.message();
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
@@ -140,9 +146,9 @@ bool protocol_version_70002::handle_receive_reject(const code& ec,
     if (code == reject::reason_code::obsolete)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Obsolete version reject from [" << authority() << "] '"
+            << "Obsolete version reject from [" << this->authority() << "] '"
             << reject->reason() << "'";
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
@@ -150,15 +156,16 @@ bool protocol_version_70002::handle_receive_reject(const code& ec,
     if (code == reject::reason_code::duplicate)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Duplicate version reject from [" << authority() << "] '"
+            << "Duplicate version reject from [" << this->authority() << "] '"
             << reject->reason() << "'";
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
     return true;
 }
 
+template class protocol_version_70002<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

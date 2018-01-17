@@ -25,19 +25,19 @@
 #include <memory>
 #include <utility>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/acceptor.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/connector.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/proxy.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/acceptor.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/connector.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/proxy.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define SESSION_ARGS(handler, args) \
     std::forward<Handler>(handler), \
-    shared_from_base<Session>(), \
+    this->template shared_from_base<Session>(), \
     std::forward<Args>(args)...
 #define BOUND_SESSION(handler, args) \
     std::bind(SESSION_ARGS(handler, args))
@@ -49,11 +49,12 @@ namespace network {
 #define BOUND_SESSION_TYPE(handler, args) \
     std::bind(SESSION_ARGS_TYPE(handler, args))
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /// Base class for maintaining the lifetime of a channel set, thread safe.
+template <class MessageSubscriber>
 class BCT_API session
-  : public enable_shared_from_base<session>, noncopyable
+  : public enable_shared_from_base<session<MessageSubscriber>>, noncopyable
 {
 public:
     typedef config::authority authority;
@@ -61,8 +62,8 @@ public:
     typedef std::function<void(bool)> truth_handler;
     typedef std::function<void(size_t)> count_handler;
     typedef std::function<void(const code&)> result_handler;
-    typedef std::function<void(const code&, channel::ptr)> channel_handler;
-    typedef std::function<void(const code&, acceptor::ptr)> accept_handler;
+    typedef std::function<void(const code&, typename channel<MessageSubscriber>::ptr)> channel_handler;
+    typedef std::function<void(const code&, typename acceptor<MessageSubscriber>::ptr)> accept_handler;
     typedef std::function<void(const code&, const authority&)> host_handler;
 
     /// Start the session, invokes handler once stop is registered.
@@ -74,7 +75,7 @@ public:
 protected:
 
     /// Construct an instance.
-    session(p2p& network, bool notify_on_connect);
+    session(p2p<MessageSubscriber>& network, bool notify_on_connect);
 
     /// Validate session stopped.
     ~session();
@@ -84,7 +85,7 @@ protected:
 
     /// Attach a protocol to a channel, caller must start the channel.
     template <class Protocol, typename... Args>
-    typename Protocol::ptr attach(channel::ptr channel, Args&&... args)
+    typename Protocol::ptr attach(typename channel<MessageSubscriber>::ptr channel, Args&&... args)
     {
         return std::make_shared<Protocol>(network_, channel,
             std::forward<Args>(args)...);
@@ -133,26 +134,26 @@ protected:
     /// Socket creators.
     // ------------------------------------------------------------------------
 
-    virtual acceptor::ptr create_acceptor();
-    virtual connector::ptr create_connector();
+    virtual typename acceptor<MessageSubscriber>::ptr create_acceptor();
+    virtual typename connector<MessageSubscriber>::ptr create_connector();
 
     // Pending connect.
     // ------------------------------------------------------------------------
 
     /// Store a pending connection reference.
-    virtual code pend(connector::ptr connector);
+    virtual code pend(typename connector<MessageSubscriber>::ptr connector);
 
     /// Free a pending connection reference.
-    virtual void unpend(connector::ptr connector);
+    virtual void unpend(typename connector<MessageSubscriber>::ptr connector);
 
     // Pending handshake.
     // ------------------------------------------------------------------------
 
     /// Store a pending connection reference.
-    virtual code pend(channel::ptr channel);
+    virtual code pend(typename channel<MessageSubscriber>::ptr channel);
 
     /// Free a pending connection reference.
-    virtual void unpend(channel::ptr channel);
+    virtual void unpend(typename channel<MessageSubscriber>::ptr channel);
 
     /// Test for a pending connection reference.
     virtual bool pending(uint64_t version_nonce) const;
@@ -161,42 +162,42 @@ protected:
     //-------------------------------------------------------------------------
 
     /// Register a new channel with the session and bind its handlers.
-    virtual void register_channel(channel::ptr channel,
+    virtual void register_channel(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started, result_handler handle_stopped);
 
     /// Start the channel, override to perform pending registration.
-    virtual void start_channel(channel::ptr channel,
+    virtual void start_channel(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started);
 
     /// Override to attach specialized handshake protocols upon session start.
-    virtual void attach_handshake_protocols(channel::ptr channel,
+    virtual void attach_handshake_protocols(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started);
 
     /// The handshake is complete, override to perform loopback check.
-    virtual void handshake_complete(channel::ptr channel,
+    virtual void handshake_complete(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started);
 
     // TODO: create session_timer base class.
     threadpool& pool_;
     const settings& settings_;
 
-private:
-    typedef bc::pending<connector> connectors;
+protected:
+    typedef bc::pending<connector<MessageSubscriber>> connectors;
 
     void handle_stop(const code& ec);
-    void handle_starting(const code& ec, channel::ptr channel,
+    void handle_starting(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started);
-    void handle_handshake(const code& ec, channel::ptr channel,
+    void handle_handshake(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started);
-    void handle_start(const code& ec, channel::ptr channel,
+    void handle_start(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started, result_handler handle_stopped);
-    void handle_remove(const code& ec, channel::ptr channel,
+    void handle_remove(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_stopped);
 
     // These are thread safe.
     std::atomic<bool> stopped_;
     const bool notify_on_connect_;
-    p2p& network_;
+    p2p<MessageSubscriber>& network_;
     mutable dispatcher dispatch_;
 };
 
@@ -206,22 +207,22 @@ private:
 #undef BOUND_SESSION_TYPE
 
 #define BIND1(method, p1) \
-    bind<CLASS>(&CLASS::method, p1)
+    CLASS::template bind<CLASS>(&CLASS::method, p1)
 #define BIND2(method, p1, p2) \
-    bind<CLASS>(&CLASS::method, p1, p2)
+    CLASS::template bind<CLASS>(&CLASS::method, p1, p2)
 #define BIND3(method, p1, p2, p3) \
-    bind<CLASS>(&CLASS::method, p1, p2, p3)
+    CLASS::template bind<CLASS>(&CLASS::method, p1, p2, p3)
 #define BIND4(method, p1, p2, p3, p4) \
-    bind<CLASS>(&CLASS::method, p1, p2, p3, p4)
+    CLASS::template bind<CLASS>(&CLASS::method, p1, p2, p3, p4)
 #define BIND5(method, p1, p2, p3, p4, p5) \
-    bind<CLASS>(&CLASS::method, p1, p2, p3, p4, p5)
+    CLASS::template bind<CLASS>(&CLASS::method, p1, p2, p3, p4, p5)
 #define BIND6(method, p1, p2, p3, p4, p5, p6) \
-    bind<CLASS>(&CLASS::method, p1, p2, p3, p4, p5, p6)
+    CLASS::template bind<CLASS>(&CLASS::method, p1, p2, p3, p4, p5, p6)
 #define BIND7(method, p1, p2, p3, p4, p5, p6, p7) \
-    bind<CLASS>(&CLASS::method, p1, p2, p3, p4, p5, p6, p7)
+    CLASS::template bind<CLASS>(&CLASS::method, p1, p2, p3, p4, p5, p6, p7)
 
 #define CONCURRENT_DELEGATE2(method, p1, p2) \
-    concurrent_delegate<CLASS>(&CLASS::method, p1, p2)
+    CLASS::template concurrent_delegate<CLASS>(&CLASS::method, p1, p2)
 
 
 } // namespace network

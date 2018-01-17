@@ -24,27 +24,29 @@
 #include <memory>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/connector.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/sessions/session.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/connector.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/sessions/session.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /// Manual connections session, thread safe.
+template <class MessageSubscriber>
 class BCT_API session_manual
-  : public session, track<session_manual>
+  : public session<MessageSubscriber>, track<session_manual<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<session_manual> ptr;
-    typedef std::function<void(const code&, channel::ptr)> channel_handler;
+    typedef std::shared_ptr<session_manual<MessageSubscriber>> ptr;
+    typedef std::function<void(const code&, typename channel<MessageSubscriber>::ptr)> channel_handler;
+    typedef typename session<MessageSubscriber>::result_handler result_handler;
 
     /// Construct an instance.
-    session_manual(p2p& network, bool notify_on_connect);
+    session_manual(p2p<MessageSubscriber>& network, bool notify_on_connect);
 
     /// Start the manual session.
     void start(result_handler handler) override;
@@ -58,19 +60,19 @@ public:
 
 protected:
     /// Override to attach specialized protocols upon channel start.
-    virtual void attach_protocols(channel::ptr channel);
+    virtual void attach_protocols(typename channel<MessageSubscriber>::ptr channel);
 
 private:
     void start_connect(const code& ec, const std::string& hostname,
         uint16_t port, uint32_t attempts, channel_handler handler);
 
     void handle_started(const code& ec, result_handler handler);
-    void handle_connect(const code& ec, channel::ptr channel,
+    void handle_connect(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         const std::string& hostname, uint16_t port, uint32_t remaining,
-        connector::ptr connector, channel_handler handler);
+        typename connector<MessageSubscriber>::ptr connector, channel_handler handler);
 
     void handle_channel_start(const code& ec, const std::string& hostname,
-        uint16_t port, channel::ptr channel, channel_handler handler);
+        uint16_t port, typename channel<MessageSubscriber>::ptr channel, channel_handler handler);
     void handle_channel_stop(const code& ec, const std::string& hostname,
         uint16_t port);
 };

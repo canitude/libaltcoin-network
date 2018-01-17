@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/sessions/session.hpp>
+#include <altcoin/network/sessions/session.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -24,24 +24,25 @@
 #include <functional>
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/acceptor.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/connector.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/proxy.hpp>
-#include <bitcoin/network/protocols/protocol_version_31402.hpp>
-#include <bitcoin/network/protocols/protocol_version_70002.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/acceptor.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/connector.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/proxy.hpp>
+#include <altcoin/network/protocols/protocol_version_31402.hpp>
+#include <altcoin/network/protocols/protocol_version_70002.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-#define CLASS session
+#define CLASS session<MessageSubscriber>
 #define NAME "session"
 
 using namespace std::placeholders;
 
-session::session(p2p& network, bool notify_on_connect)
+template<class MessageSubscriber>
+session<MessageSubscriber>::session(p2p<MessageSubscriber>& network, bool notify_on_connect)
   : pool_(network.thread_pool()),
     settings_(network.network_settings()),
     stopped_(true),
@@ -51,7 +52,8 @@ session::session(p2p& network, bool notify_on_connect)
 {
 }
 
-session::~session()
+template<class MessageSubscriber>
+session<MessageSubscriber>::~session()
 {
     BITCOIN_ASSERT_MSG(stopped(), "The session was not stopped.");
 }
@@ -60,22 +62,26 @@ session::~session()
 // ----------------------------------------------------------------------------
 // protected
 
-size_t session::address_count() const
+template<class MessageSubscriber>
+size_t session<MessageSubscriber>::address_count() const
 {
     return network_.address_count();
 }
 
-size_t session::connection_count() const
+template<class MessageSubscriber>
+size_t session<MessageSubscriber>::connection_count() const
 {
     return network_.connection_count();
 }
 
-code session::fetch_address(address& out_address) const
+template<class MessageSubscriber>
+code session<MessageSubscriber>::fetch_address(address& out_address) const
 {
     return network_.fetch_address(out_address);
 }
 
-bool session::blacklisted(const authority& authority) const
+template<class MessageSubscriber>
+bool session<MessageSubscriber>::blacklisted(const authority& authority) const
 {
     const auto ip_compare = [&](const config::authority& blocked)
     {
@@ -86,12 +92,14 @@ bool session::blacklisted(const authority& authority) const
     return std::any_of(list.begin(), list.end(), ip_compare);
 }
 
-bool session::stopped() const
+template<class MessageSubscriber>
+bool session<MessageSubscriber>::stopped() const
 {
     return stopped_;
 }
 
-bool session::stopped(const code& ec) const
+template<class MessageSubscriber>
+bool session<MessageSubscriber>::stopped(const code& ec) const
 {
     return stopped() || ec == error::service_stopped;
 }
@@ -99,25 +107,29 @@ bool session::stopped(const code& ec) const
 // Socket creators.
 // ----------------------------------------------------------------------------
 
-acceptor::ptr session::create_acceptor()
+template<class MessageSubscriber>
+typename acceptor<MessageSubscriber>::ptr session<MessageSubscriber>::create_acceptor()
 {
-    return std::make_shared<acceptor>(pool_, settings_);
+    return std::make_shared<acceptor<MessageSubscriber>>(pool_, settings_);
 }
 
-connector::ptr session::create_connector()
+template<class MessageSubscriber>
+typename connector<MessageSubscriber>::ptr session<MessageSubscriber>::create_connector()
 {
-    return std::make_shared<connector>(pool_, settings_);
+    return std::make_shared<connector<MessageSubscriber>>(pool_, settings_);
 }
 
 // Pending connect.
 // ----------------------------------------------------------------------------
 
-code session::pend(connector::ptr connector)
+template<class MessageSubscriber>
+code session<MessageSubscriber>::pend(typename connector<MessageSubscriber>::ptr connector)
 {
     return network_.pend(connector);
 }
 
-void session::unpend(connector::ptr connector)
+template<class MessageSubscriber>
+void session<MessageSubscriber>::unpend(typename connector<MessageSubscriber>::ptr connector)
 {
     network_.unpend(connector);
 }
@@ -125,17 +137,20 @@ void session::unpend(connector::ptr connector)
 // Pending handshake.
 // ----------------------------------------------------------------------------
 
-code session::pend(channel::ptr channel)
+template<class MessageSubscriber>
+code session<MessageSubscriber>::pend(typename channel<MessageSubscriber>::ptr channel)
 {
     return network_.pend(channel);
 }
 
-void session::unpend(channel::ptr channel)
+template<class MessageSubscriber>
+void session<MessageSubscriber>::unpend(typename channel<MessageSubscriber>::ptr channel)
 {
     network_.unpend(channel);
 }
 
-bool session::pending(uint64_t version_nonce) const
+template<class MessageSubscriber>
+bool session<MessageSubscriber>::pending(uint64_t version_nonce) const
 {
     return network_.pending(version_nonce);
 }
@@ -144,7 +159,8 @@ bool session::pending(uint64_t version_nonce) const
 // ----------------------------------------------------------------------------
 // Must not change context before subscribing.
 
-void session::start(result_handler handler)
+template<class MessageSubscriber>
+void session<MessageSubscriber>::start(result_handler handler)
 {
     if (!stopped())
     {
@@ -159,7 +175,8 @@ void session::start(result_handler handler)
     handler(error::success);
 }
 
-void session::handle_stop(const code& ec)
+template<class MessageSubscriber>
+void session<MessageSubscriber>::handle_stop(const code& ec)
 {
     // This signals the session to stop creating connections, but does not
     // close the session. Channels stop, resulting in session loss of scope.
@@ -169,7 +186,8 @@ void session::handle_stop(const code& ec)
 // Subscribe Stop.
 // ----------------------------------------------------------------------------
 
-void session::subscribe_stop(result_handler handler)
+template<class MessageSubscriber>
+void session<MessageSubscriber>::subscribe_stop(result_handler handler)
 {
     network_.subscribe_stop(handler);
 }
@@ -178,7 +196,8 @@ void session::subscribe_stop(result_handler handler)
 // ----------------------------------------------------------------------------
 // Must not change context in start or stop sequences (use bind).
 
-void session::register_channel(channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::register_channel(typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started, result_handler handle_stopped)
 {
     if (stopped())
@@ -192,7 +211,8 @@ void session::register_channel(channel::ptr channel,
         BIND4(handle_start, _1, channel, handle_started, handle_stopped));
 }
 
-void session::start_channel(channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::start_channel(typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started)
 {
     channel->set_notify(notify_on_connect_);
@@ -203,7 +223,8 @@ void session::start_channel(channel::ptr channel,
         BIND3(handle_starting, _1, channel, handle_started));
 }
 
-void session::handle_starting(const code& ec, channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::handle_starting(const code& ec, typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started)
 {
     if (ec)
@@ -219,18 +240,20 @@ void session::handle_starting(const code& ec, channel::ptr channel,
         BIND3(handle_handshake, _1, channel, handle_started));
 }
 
-void session::attach_handshake_protocols(channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::attach_handshake_protocols(typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started)
 {
     // Reject messages are not handled until bip61 (70002).
     // The negotiated_version is initialized to the configured maximum.
     if (channel->negotiated_version() >= message::version::level::bip61)
-        attach<protocol_version_70002>(channel)->start(handle_started);
+        this->attach<protocol_version_70002<MessageSubscriber>>(channel)->start(handle_started);
     else
-        attach<protocol_version_31402>(channel)->start(handle_started);
+        this->attach<protocol_version_31402<MessageSubscriber>>(channel)->start(handle_started);
 }
 
-void session::handle_handshake(const code& ec, channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::handle_handshake(const code& ec, typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started)
 {
     if (ec)
@@ -246,14 +269,16 @@ void session::handle_handshake(const code& ec, channel::ptr channel,
     handshake_complete(channel, handle_started);
 }
 
-void session::handshake_complete(channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::handshake_complete(typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started)
 {
     // This will fail if the IP address or nonce is already connected.
     handle_started(network_.store(channel));
 }
 
-void session::handle_start(const code& ec, channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::handle_start(const code& ec, typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_started, result_handler handle_stopped)
 {
     // Must either stop or subscribe the channel for stop before returning.
@@ -274,12 +299,15 @@ void session::handle_start(const code& ec, channel::ptr channel,
     handle_started(ec);
 }
 
-void session::handle_remove(const code& ec, channel::ptr channel,
+template<class MessageSubscriber>
+void session<MessageSubscriber>::handle_remove(const code& ec, typename channel<MessageSubscriber>::ptr channel,
     result_handler handle_stopped)
 {
     network_.remove(channel);
     handle_stopped(error::success);
 }
+
+template class session<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

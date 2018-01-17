@@ -23,49 +23,51 @@
 #include <memory>
 #include <vector>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/connector.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/sessions/session.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/connector.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/sessions/session.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /// Seed connections session, thread safe.
+template <class MessageSubscriber>
 class BCT_API session_seed
-  : public session, track<session_seed>
+  : public session<MessageSubscriber>, track<session_seed<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<session_seed> ptr;
+    typedef std::shared_ptr<session_seed<MessageSubscriber>> ptr;
+    typedef typename session<MessageSubscriber>::result_handler result_handler;
 
     /// Construct an instance.
-    session_seed(p2p& network);
+    session_seed(p2p<MessageSubscriber>& network);
 
     /// Start the session.
     void start(result_handler handler) override;
 
 protected:
     /// Overridden to set service and version mins upon session start.
-    void attach_handshake_protocols(channel::ptr channel,
+    void attach_handshake_protocols(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started) override;
 
     /// Override to attach specialized protocols upon channel start.
-    virtual void attach_protocols(channel::ptr channel,
+    virtual void attach_protocols(typename channel<MessageSubscriber>::ptr channel,
         result_handler handler);
 
 private:
     void start_seeding(size_t start_size, result_handler handler);
     void start_seed(const config::endpoint& seed, result_handler handler);
     void handle_started(const code& ec, result_handler handler);
-    void handle_connect(const code& ec, channel::ptr channel,
-        const config::endpoint& seed, connector::ptr connector,
+    void handle_connect(const code& ec, typename channel<MessageSubscriber>::ptr channel,
+        const config::endpoint& seed, typename connector<MessageSubscriber>::ptr connector,
         result_handler handler);
     void handle_complete(size_t start_size, result_handler handler);
 
-    void handle_channel_start(const code& ec, channel::ptr channel,
+    void handle_channel_start(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         result_handler handler);
     void handle_channel_stop(const code& ec);
 };

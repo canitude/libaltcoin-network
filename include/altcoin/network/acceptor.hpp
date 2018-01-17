@@ -24,9 +24,9 @@
 #include <functional>
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
@@ -34,12 +34,13 @@ namespace network {
 /// Create inbound socket connections.
 /// This class is thread safe against stop.
 /// This class is not safe for concurrent listening attempts.
+template <class MessageSubscriber>
 class BCT_API acceptor
-  : public enable_shared_from_base<acceptor>, noncopyable, track<acceptor>
+  : public enable_shared_from_base<acceptor<MessageSubscriber>>, noncopyable, track<acceptor<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<acceptor> ptr;
-    typedef std::function<void(const code&, channel::ptr)> accept_handler;
+    typedef std::shared_ptr<acceptor<MessageSubscriber>> ptr;
+    typedef std::function<void(const code&, typename channel<MessageSubscriber>::ptr)> accept_handler;
 
     /// Construct an instance.
     acceptor(threadpool& pool, const settings& settings);

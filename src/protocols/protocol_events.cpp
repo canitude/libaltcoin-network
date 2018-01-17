@@ -16,38 +16,41 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_events.hpp>
+#include <altcoin/network/protocols/protocol_events.hpp>
 
 #include <functional>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-#define CLASS protocol_events
+#define CLASS protocol_events<MessageSubscriber>
 
 using namespace std::placeholders;
 
-protocol_events::protocol_events(p2p& network, channel::ptr channel,
+template<class MessageSubscriber>
+protocol_events<MessageSubscriber>::protocol_events(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel,
     const std::string& name)
-  : protocol(network, channel, name)
+  : protocol<MessageSubscriber>(network, channel, name)
 {
 }
 
 // Properties.
 // ----------------------------------------------------------------------------
 
-bool protocol_events::stopped() const
+template<class MessageSubscriber>
+bool protocol_events<MessageSubscriber>::stopped() const
 {
     // Used for context-free stop testing.
     return !handler_.load();
 }
 
-bool protocol_events::stopped(const code& ec) const
+template<class MessageSubscriber>
+bool protocol_events<MessageSubscriber>::stopped(const code& ec) const
 {
     // The service stop code may also make its way into protocol handlers.
     return stopped() || ec == error::channel_stopped ||
@@ -57,13 +60,15 @@ bool protocol_events::stopped(const code& ec) const
 // Start.
 // ----------------------------------------------------------------------------
 
-void protocol_events::start()
+template<class MessageSubscriber>
+void protocol_events<MessageSubscriber>::start()
 {
     const auto nop = [](const code&){};
     start(nop);
 }
 
-void protocol_events::start(event_handler handler)
+template<class MessageSubscriber>
+void protocol_events<MessageSubscriber>::start(event_handler handler)
 {
     handler_.store(handler);
     SUBSCRIBE_STOP1(handle_stopped, _1);
@@ -72,12 +77,13 @@ void protocol_events::start(event_handler handler)
 // Stop.
 // ----------------------------------------------------------------------------
 
-void protocol_events::handle_stopped(const code& ec)
+template<class MessageSubscriber>
+void protocol_events<MessageSubscriber>::handle_stopped(const code& ec)
 {
     if (!stopped(ec))
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Stop protocol_" << name() << " on [" << authority() << "] "
+            << "Stop protocol_" << this->name() << " on [" << this->authority() << "] "
             << ec.message();
     }
 
@@ -88,7 +94,8 @@ void protocol_events::handle_stopped(const code& ec)
 // Set Event.
 // ----------------------------------------------------------------------------
 
-void protocol_events::set_event(const code& ec)
+template<class MessageSubscriber>
+void protocol_events<MessageSubscriber>::set_event(const code& ec)
 {
     // If already stopped.
     auto handler = handler_.load();
@@ -102,6 +109,8 @@ void protocol_events::set_event(const code& ec)
     // Invoke event handler.
     handler(ec);
 }
+
+template class protocol_events<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

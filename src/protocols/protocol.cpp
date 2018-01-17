@@ -16,20 +16,21 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol.hpp>
+#include <altcoin/network/protocols/protocol.hpp>
 
 #include <cstdint>
 #include <string>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/p2p.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/p2p.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define NAME "protocol"
 
-protocol::protocol(p2p& network, channel::ptr channel, const std::string& name)
+template<class MessageSubscriber>
+protocol<MessageSubscriber>::protocol(p2p<MessageSubscriber>& network, typename channel<MessageSubscriber>::ptr channel, const std::string& name)
   : pool_(network.thread_pool()),
     dispatch_(network.thread_pool(), NAME),
     channel_(channel),
@@ -37,58 +38,70 @@ protocol::protocol(p2p& network, channel::ptr channel, const std::string& name)
 {
 }
 
-config::authority protocol::authority() const
+template<class MessageSubscriber>
+config::authority protocol<MessageSubscriber>::authority() const
 {
     return channel_->authority();
 }
 
-const std::string& protocol::name() const
+template<class MessageSubscriber>
+const std::string& protocol<MessageSubscriber>::name() const
 {
     return name_;
 }
 
-uint64_t protocol::nonce() const
+template<class MessageSubscriber>
+uint64_t protocol<MessageSubscriber>::nonce() const
 {
     return channel_->nonce();
 }
 
-version_const_ptr protocol::peer_version() const
+template<class MessageSubscriber>
+version_const_ptr protocol<MessageSubscriber>::peer_version() const
 {
     return channel_->peer_version();
 }
 
-void protocol::set_peer_version(version_const_ptr value)
+template<class MessageSubscriber>
+void protocol<MessageSubscriber>::set_peer_version(version_const_ptr value)
 {
     channel_->set_peer_version(value);
 }
 
-uint32_t protocol::negotiated_version() const
+template<class MessageSubscriber>
+uint32_t protocol<MessageSubscriber>::negotiated_version() const
 {
     return channel_->negotiated_version();
 }
 
-void protocol::set_negotiated_version(uint32_t value)
+template<class MessageSubscriber>
+void protocol<MessageSubscriber>::set_negotiated_version(uint32_t value)
 {
     channel_->set_negotiated_version(value);
 }
 
-threadpool& protocol::pool()
+template<class MessageSubscriber>
+threadpool& protocol<MessageSubscriber>::pool()
 {
     return pool_;
 }
 
 // Stop the channel.
-void protocol::stop(const code& ec)
+template<class MessageSubscriber>
+void protocol<MessageSubscriber>::stop(const code& ec)
 {
     channel_->stop(ec);
 }
 
 // protected
-void protocol::handle_send(const code& ec, const std::string& command)
+template<class MessageSubscriber>
+void protocol<MessageSubscriber>::handle_send(const code& ec, const std::string& command)
 {
     // Send and receive failures are logged by the proxy.
     // This provides a convenient location for override if desired.
 }
+
+template class protocol<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

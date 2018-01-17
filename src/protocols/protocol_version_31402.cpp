@@ -16,22 +16,22 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <bitcoin/network/protocols/protocol_version_31402.hpp>
+#include <altcoin/network/protocols/protocol_version_31402.hpp>
 
 #include <cstdint>
 #include <functional>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/p2p.hpp>
-#include <bitcoin/network/protocols/protocol_timer.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/p2p.hpp>
+#include <altcoin/network/protocols/protocol_timer.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
 #define NAME "version"
-#define CLASS protocol_version_31402
+#define CLASS protocol_version_31402<MessageSubscriber>
 
 using namespace bc::message;
 using namespace std::placeholders;
@@ -41,8 +41,9 @@ using namespace std::placeholders;
 // Configured min version is our own but we may require higer for some stuff.
 // Configured services was our but we found that most incoming connections are
 // set to zero, so that is currently the default (see below).
-protocol_version_31402::protocol_version_31402(p2p& network,
-    channel::ptr channel)
+template<class MessageSubscriber>
+protocol_version_31402<MessageSubscriber>::protocol_version_31402(p2p<MessageSubscriber>& network,
+    typename channel<MessageSubscriber>::ptr channel)
   : protocol_version_31402(network, channel,
         network.network_settings().protocol_maximum,
         network.network_settings().services,
@@ -52,25 +53,27 @@ protocol_version_31402::protocol_version_31402(p2p& network,
 {
 }
 
-protocol_version_31402::protocol_version_31402(p2p& network,
-    channel::ptr channel, uint32_t own_version, uint64_t own_services,
+template<class MessageSubscriber>
+protocol_version_31402<MessageSubscriber>::protocol_version_31402(p2p<MessageSubscriber>& network,
+    typename channel<MessageSubscriber>::ptr channel, uint32_t own_version, uint64_t own_services,
     uint64_t invalid_services, uint32_t minimum_version,
     uint64_t minimum_services)
-  : protocol_timer(network, channel, false, NAME),
+  : protocol_timer<MessageSubscriber>(network, channel, false, NAME),
     network_(network),
     own_version_(own_version),
     own_services_(own_services),
     invalid_services_(invalid_services),
     minimum_version_(minimum_version),
     minimum_services_(minimum_services),
-    CONSTRUCT_TRACK(protocol_version_31402)
+    CONSTRUCT_TRACK(protocol_version_31402<MessageSubscriber>)
 {
 }
 
 // Start sequence.
 // ----------------------------------------------------------------------------
 
-void protocol_version_31402::start(event_handler handler)
+template<class MessageSubscriber>
+void protocol_version_31402<MessageSubscriber>::start(event_handler handler)
 {
     const auto period = network_.network_settings().channel_handshake();
 
@@ -78,14 +81,15 @@ void protocol_version_31402::start(event_handler handler)
         synchronizer_terminate::on_error);
 
     // The handler is invoked in the context of the last message receipt.
-    protocol_timer::start(period, join_handler);
+    protocol_timer<MessageSubscriber>::start(period, join_handler);
 
     SUBSCRIBE2(version, handle_receive_version, _1, _2);
     SUBSCRIBE2(verack, handle_receive_verack, _1, _2);
     SEND2(version_factory(), handle_send, _1, version::command);
 }
 
-message::version protocol_version_31402::version_factory() const
+template<class MessageSubscriber>
+message::version protocol_version_31402<MessageSubscriber>::version_factory() const
 {
     const auto& settings = network_.network_settings();
     const auto height = network_.top_block().height();
@@ -95,9 +99,9 @@ message::version protocol_version_31402::version_factory() const
     version.set_value(own_version_);
     version.set_services(own_services_);
     version.set_timestamp(static_cast<uint64_t>(zulu_time()));
-    version.set_address_receiver(authority().to_network_address());
+    version.set_address_receiver(this->authority().to_network_address());
     version.set_address_sender(settings.self.to_network_address());
-    version.set_nonce(nonce());
+    version.set_nonce(this->nonce());
     version.set_user_agent(BC_USER_AGENT);
     version.set_start_height(static_cast<uint32_t>(height));
 
@@ -112,23 +116,24 @@ message::version protocol_version_31402::version_factory() const
 // Protocol.
 // ----------------------------------------------------------------------------
 
-bool protocol_version_31402::handle_receive_version(const code& ec,
+template<class MessageSubscriber>
+bool protocol_version_31402<MessageSubscriber>::handle_receive_version(const code& ec,
     version_const_ptr message)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure receiving version from [" << authority() << "] "
+            << "Failure receiving version from [" << this->authority() << "] "
             << ec.message();
-        set_event(ec);
+        this->set_event(ec);
         return false;
     }
 
     LOG_DEBUG(LOG_NETWORK)
-        << "Peer [" << authority() << "] protocol version ("
+        << "Peer [" << this->authority() << "] protocol version ("
         << message->value() << ") user agent: " << message->user_agent();
 
     // TODO: move these three checks to initialization.
@@ -141,7 +146,7 @@ bool protocol_version_31402::handle_receive_version(const code& ec,
         LOG_ERROR(LOG_NETWORK)
             << "Invalid protocol version configuration, minimum below ("
             << version::level::minimum << ").";
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
@@ -150,7 +155,7 @@ bool protocol_version_31402::handle_receive_version(const code& ec,
         LOG_ERROR(LOG_NETWORK)
             << "Invalid protocol version configuration, maximum above ("
             << version::level::maximum << ").";
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
@@ -159,7 +164,7 @@ bool protocol_version_31402::handle_receive_version(const code& ec,
         LOG_ERROR(LOG_NETWORK)
             << "Invalid protocol version configuration, "
             << "minimum exceeds maximum.";
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
@@ -167,32 +172,33 @@ bool protocol_version_31402::handle_receive_version(const code& ec,
 
     if (!sufficient_peer(message))
     {
-        set_event(error::channel_stopped);
+        this->set_event(error::channel_stopped);
         return false;
     }
 
     const auto version = std::min(message->value(), own_version_);
-    set_negotiated_version(version);
-    set_peer_version(message);
+    this->set_negotiated_version(version);
+    this->set_peer_version(message);
 
     LOG_DEBUG(LOG_NETWORK)
         << "Negotiated protocol version (" << version
-        << ") for [" << authority() << "]";
+        << ") for [" << this->authority() << "]";
 
     SEND2(verack(), handle_send, _1, verack::command);
 
     // 1 of 2
-    set_event(error::success);
+    this->set_event(error::success);
     return false;
 }
 
-bool protocol_version_31402::sufficient_peer(version_const_ptr message)
+template<class MessageSubscriber>
+bool protocol_version_31402<MessageSubscriber>::sufficient_peer(version_const_ptr message)
 {
     if ((message->services() & invalid_services_) != 0)
     {
         LOG_DEBUG(LOG_NETWORK)
             << "Invalid peer network services (" << message->services()
-            << ") for [" << authority() << "]";
+            << ") for [" << this->authority() << "]";
         return false;
     }
 
@@ -200,7 +206,7 @@ bool protocol_version_31402::sufficient_peer(version_const_ptr message)
     {
         LOG_DEBUG(LOG_NETWORK)
             << "Insufficient peer network services (" << message->services()
-            << ") for [" << authority() << "]";
+            << ") for [" << this->authority() << "]";
         return false;
     }
 
@@ -208,32 +214,35 @@ bool protocol_version_31402::sufficient_peer(version_const_ptr message)
     {
         LOG_DEBUG(LOG_NETWORK)
             << "Insufficient peer protocol version (" << message->value()
-            << ") for [" << authority() << "]";
+            << ") for [" << this->authority() << "]";
         return false;
     }
 
     return true;
 }
 
-bool protocol_version_31402::handle_receive_verack(const code& ec,
+template<class MessageSubscriber>
+bool protocol_version_31402<MessageSubscriber>::handle_receive_verack(const code& ec,
     verack_const_ptr)
 {
-    if (stopped(ec))
+    if (this->stopped(ec))
         return false;
 
     if (ec)
     {
         LOG_DEBUG(LOG_NETWORK)
-            << "Failure receiving verack from [" << authority() << "] "
+            << "Failure receiving verack from [" << this->authority() << "] "
             << ec.message();
-        set_event(ec);
+        this->set_event(ec);
         return false;
     }
 
     // 2 of 2
-    set_event(error::success);
+    this->set_event(error::success);
     return false;
 }
+
+template class protocol_version_31402<message_subscriber>;
 
 } // namespace network
 } // namespace libbitcoin

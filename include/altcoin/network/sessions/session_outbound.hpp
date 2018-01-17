@@ -22,52 +22,54 @@
 #include <cstddef>
 #include <memory>
 #include <bitcoin/bitcoin.hpp>
-#include <bitcoin/network/channel.hpp>
-#include <bitcoin/network/define.hpp>
-#include <bitcoin/network/sessions/session_batch.hpp>
-#include <bitcoin/network/settings.hpp>
+#include <altcoin/network/channel.hpp>
+#include <altcoin/network/define.hpp>
+#include <altcoin/network/sessions/session_batch.hpp>
+#include <altcoin/network/settings.hpp>
 
 namespace libbitcoin {
 namespace network {
 
-class p2p;
+template <class MessageSubscriber> class p2p;
 
 /// Outbound connections session, thread safe.
+template <class MessageSubscriber>
 class BCT_API session_outbound
-  : public session_batch, track<session_outbound>
+  : public session_batch<MessageSubscriber>, track<session_outbound<MessageSubscriber>>
 {
 public:
-    typedef std::shared_ptr<session_outbound> ptr;
+    typedef std::shared_ptr<session_outbound<MessageSubscriber>> ptr;
+    typedef typename session<MessageSubscriber>::result_handler result_handler;
 
     /// Construct an instance.
-    session_outbound(p2p& network, bool notify_on_connect);
+    session_outbound(p2p<MessageSubscriber>& network, bool notify_on_connect);
 
     /// Start the session.
     void start(result_handler handler) override;
 
 protected:
     /// Overridden to implement pending outbound channels.
-    void start_channel(channel::ptr channel,
+    void start_channel(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started) override;
 
     /// Overridden to attach minimum service level for witness support.
-    void attach_handshake_protocols(channel::ptr channel,
+    virtual void attach_handshake_protocols(typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started) override;
 
     /// Override to attach specialized protocols upon channel start.
-    virtual void attach_protocols(channel::ptr channel);
+    virtual void attach_protocols(typename channel<MessageSubscriber>::ptr channel);
 
 private:
     void new_connection(const code&);
 
     void handle_started(const code& ec, result_handler handler);
-    void handle_connect(const code& ec, channel::ptr channel);
+    void handle_connect(const code& ec, typename channel<MessageSubscriber>::ptr channel);
 
-    void do_unpend(const code& ec, channel::ptr channel,
+    void do_unpend(const code& ec, typename channel<MessageSubscriber>::ptr channel,
         result_handler handle_started);
 
-    void handle_channel_stop(const code& ec, channel::ptr channel);
-    void handle_channel_start(const code& ec, channel::ptr channel);
+    void handle_channel_stop(const code& ec, typename channel<MessageSubscriber>::ptr channel);
+    void handle_channel_start(const code& ec, typename channel<MessageSubscriber>::ptr channel);
 };
 
 } // namespace network
